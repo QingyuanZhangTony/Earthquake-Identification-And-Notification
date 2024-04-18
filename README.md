@@ -3,8 +3,9 @@ This repository is for my dissertation project of Durham MDS.
 
 
 This flowchart showing below would reflect my current design and progress.
-It will be updated constantly (Updated 2024-04-18<).
+It will be updated constantly.
 <img src="Flowchart.png" width="600">
+(Last Updated 2024-04-18)
 
 # Progress Log
 <b>2024-04-18<b/> <br />
