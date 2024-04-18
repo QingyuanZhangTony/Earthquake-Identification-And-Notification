@@ -1,5 +1,6 @@
 # Earthquake-Identification-And-Notification
-Automated earthquake identification and notification systems.This repository is for my dissertation project of Durham MDS. 
+This repository is for my dissertation project of Durham MDS. 
+The program is designed for automated earthquake identification and notification systems.
 
 
 
