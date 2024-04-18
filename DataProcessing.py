@@ -29,7 +29,7 @@ def data_processing(mseed_file):
     return mseed_file
 
 
-# 示例调用
+# Usage Example
 date = UTCDateTime("2024-04-03")
 station = ['GB', 'EDMD', 'IRIS']
 
