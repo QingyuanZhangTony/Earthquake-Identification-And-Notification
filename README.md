@@ -1,4 +1,4 @@
-Automated Earthquake Identification And Notification Systems
+# Automated Earthquake Identification And Notification Systems
 This repository is for my dissertation project of Durham MDS. 
 
 
