@@ -3,4 +3,4 @@ Automated earthquake identification and notification systems.This repository is 
 
 
 
-<img src="Flowchart.png" width="100" height="100">
+<img src="Flowchart.png" width="800">
