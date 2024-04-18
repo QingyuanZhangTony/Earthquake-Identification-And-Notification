@@ -6,10 +6,10 @@ This flowchart showing below would reflect my current design and progress. It wi
 <img src="Flowchart.png" width="600">
 
 # Progress log
-2024-04-18
-Built a functional DataDownload.py for downloading seismic data from specified station and date.
-Moving on to seismic data preprocessing in DataProcessing.py. 
-Doing more background reading and improving overall code design.
+2024-04-18<br />
+Built a functional DataDownload.py for downloading seismic data from specified station and date.<br />
+Moving on to seismic data preprocessing in DataProcessing.py. <br />
+Doing more background reading and improving overall code design.<br />
 
 
 
