@@ -3,7 +3,7 @@ import sys
 from obspy import UTCDateTime
 
 from DataDownload import download_seismic_data
-from DataProcessing import get_mseed_file, data_processing, plot_graph
+from DataProcessing import get_stream, data_processing, plot_graph
 
 # Set the date and station for downloading
 date = UTCDateTime("2024-04-03")
@@ -18,7 +18,7 @@ if not success:
     sys.exit()
 
 # Data preprocessing
-stream = get_mseed_file(date, station)
+stream = get_stream(date, station)
 data_processing(stream)
 
 plot_graph(stream)

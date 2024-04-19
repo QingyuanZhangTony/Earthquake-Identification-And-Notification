@@ -1,9 +1,10 @@
+from obspy.signal.filter import bandpass
 import os
 from obspy import UTCDateTime
 from obspy import read
 
 
-def get_mseed_file(date, station_info):
+def get_stream(date, station_info):
     network, station, data_provider = station_info
     dataset_folder = f"{network}.{station}"
     cur_dir = os.getcwd()
@@ -13,22 +14,21 @@ def get_mseed_file(date, station_info):
     file_name = f"{date.strftime('%Y-%m-%d')}_{network}.{station}..Z.mseed"
     file_path = os.path.join(data_dir, file_name)
 
-    if os.path.exists(file_path):
-        stream = read(file_path)
-        return stream
-    else:
-        print(f"No data available for {date.strftime('%Y-%m-%d')}")
+    stream = read(file_path)
+    return stream
 
 
-def data_processing(mseed_file):
-    mseed_file.detrend("demean")
-    mseed_file.detrend("linear")
+def data_processing(stream):
+    stream.detrend("demean")
+    stream.detrend("linear")
 
     # High-pass filter
-    mseed_file.filter("highpass", freq=1.0)
-    return mseed_file
+    # mseed_file.filter("highpass", freq=1.0)
+    for trace in stream:
+        trace.data = bandpass(trace.data, freqmin=0.1, freqmax=40, df=trace.stats.sampling_rate, corners=5)
+
+    return stream
 
 
-def plot_graph(mseed_file):
-    mseed_file.plot()
-
+def plot_graph(stream):
+    stream.plot()
