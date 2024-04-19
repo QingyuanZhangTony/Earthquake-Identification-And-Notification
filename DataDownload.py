@@ -9,7 +9,7 @@ from obspy.clients.fdsn import Client
 from obspy.clients.fdsn.client import FDSNNoDataException
 
 
-# Function for downloading data from given station
+# Function for downloading data from given station and returns availability
 def download_seismic_data(date, station_info):
     network, station, data_provider = station_info
     location = "*"
@@ -24,7 +24,6 @@ def download_seismic_data(date, station_info):
     nslc = "{}.{}.{}.{}".format(network, station, location, channel).replace("*", "")
     client = Client(data_provider)
     datestr = date.strftime("%Y-%m-%d")
-    # Download directly to network.station named folder
     fn = os.path.join(dataset_dir, "{}_{}.mseed".format(datestr, nslc))
 
     if not os.path.isfile(fn):
@@ -39,12 +38,17 @@ def download_seismic_data(date, station_info):
                     tr.data = tr.data.filled()
             st.write(fn)
             print(f"Data for {datestr} written successfully.")
+            return True
         except FDSNNoDataException:
             print(f"No data available for {datestr}.")
+            return False
         except Exception as e:
             print(f"An error occurred for {datestr}: {str(e)}")
+            return False
     else:
         print(f"Data for {datestr} already downloaded.")
+        return True
+
 
 # Example Usage
 # date = UTCDateTime("2024-04-01")

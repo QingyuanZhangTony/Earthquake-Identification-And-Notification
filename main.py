@@ -1,3 +1,5 @@
+import sys
+
 from obspy import UTCDateTime
 
 from DataDownload import download_seismic_data
@@ -7,8 +9,13 @@ from DataProcessing import get_mseed_file, data_processing, plot_graph
 date = UTCDateTime("2024-04-03")
 station = ['GB', 'EDMD', 'IRIS']
 
-# Download and organize data
-download_seismic_data(date, station)
+# Try to download data and return availability for the date
+success = download_seismic_data(date, station)
+
+# Exit if data not available
+if not success:
+    print("Stopping execution due to no data available.")
+    sys.exit()
 
 # Data preprocessing
 stream = get_mseed_file(date, station)
