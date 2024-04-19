@@ -17,3 +17,4 @@ Doing more background reading and improving overall code design.<br />
 Still working on preprocessing and denoising. <br />
 Looking for best parameters to produce clean seismic streams.<br />
 Starting to build EventIdentification.py, which is for earthquake identification using STA/LTA method from processed seismic data.<br />
+Added a interactive Jupyter notebook version of main.py for testing and playing around.<br />
