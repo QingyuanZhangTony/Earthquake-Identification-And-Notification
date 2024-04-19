@@ -13,7 +13,7 @@ Built a functional DataDownload.py for downloading seismic data from specified s
 Moving on to seismic data preprocessing in DataProcessing.py. <br />
 Doing more background reading and improving overall code design.<br />
 <br />
-<b>2024-04-18<b/> <br />
+<b>2024-04-19<b/> <br />
 Still working on preprocessing and denoising. <br />
 Looking for best parameters to produce clean seismic streams.<br />
 Starting to build EventIdentification.py, which is for earthquake identification using STA/LTA method from processed seismic data.<br />
