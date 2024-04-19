@@ -29,11 +29,6 @@ def data_processing(mseed_file):
     return mseed_file
 
 
-# Usage Example
-date = UTCDateTime("2024-04-03")
-station = ['GB', 'EDMD', 'IRIS']
+def plot_graph(mseed_file):
+    mseed_file.plot()
 
-seismic_data = get_mseed_file(date, station)
-data_processing(seismic_data)
-
-seismic_data.plot()
