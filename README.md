@@ -16,5 +16,11 @@ Doing more background reading and improving overall code design.<br />
 ### 2024-04-19<b/> <br />
 Still working on preprocessing and denoising. <br />
 Looking for best parameters to produce clean seismic streams.<br />
-Starting to build EventIdentification.py, which is for earthquake identification using STA/LTA method from processed seismic data.<br />
+Starting to build EventIdentification.py for earthquake identification using STA/LTA method from processed seismic data.<br />
 Added an interactive Jupyter notebook version of main.py for testing and playing around.<br />
+
+### 2024-04-21<b/> <br />
+FDSNWS service still unavailable. Used https://data.raspberryshake.org for data. <br />
+Improved codes for outliers/ extreme value removal.  <br />
+Working on implementing a denoising algorithm. <br />
+
