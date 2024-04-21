@@ -21,6 +21,6 @@ Added an interactive Jupyter notebook version of main.py for testing and playing
 
 ### 2024-04-21<b/> <br />
 FDSNWS service still unavailable. Used https://data.raspberryshake.org for data. <br />
-Improved codes for outliers/ extreme value removal.  <br />
+Improved codes for outliers/ extreme values removal.  <br />
 Working on implementing a denoising algorithm. <br />
 
