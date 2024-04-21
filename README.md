@@ -1,13 +1,15 @@
 # Automated Earthquake Identification And Notification Systems
-This repository is for my dissertation project of Durham MDS. 
-## Use interactiveMain.ipynb for examples of current progress.
+This repository is for my dissertation project of Durham MDS. <br />
 
+## Usage
+Run interactiveMain.ipynb for examples of latest progress.<br />
 
-This flowchart showing below would reflect my current design and progress.
+## Flowchart of Project/ Code Design
+This reflect my current design and progress and will be updated constantly.
 <img src="Flowchart.drawio.png" width="600"><br />
 
 
-# Progress Log
+## Progress Log
 ### 2024-04-18 <br />
 Built a functional DataDownload.py for downloading seismic data from specified station and date.<br />
 Moving on to seismic data preprocessing in DataProcessing.py. <br />
