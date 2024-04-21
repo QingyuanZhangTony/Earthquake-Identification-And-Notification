@@ -23,4 +23,4 @@ Added an interactive Jupyter notebook version of main.py for testing and playing
 FDSNWS service still unavailable. Used https://data.raspberryshake.org for data. <br />
 Improved codes for outliers/ extreme values removal.  <br />
 Working on implementing a denoising algorithm. <br />
-
+Added a util.py for utility functions like getting lat and long of a given station.  <br />
