@@ -14,7 +14,6 @@ This reflect my current design and progress and will be updated constantly.
 Built a functional DataDownload.py for downloading seismic data from specified station and date.<br />
 Moving on to seismic data preprocessing in DataProcessing.py. <br />
 Doing more background reading and improving overall code design.<br />
-<br />
 
 ### 2024-04-19<b/> <br />
 Still working on preprocessing and denoising. <br />
