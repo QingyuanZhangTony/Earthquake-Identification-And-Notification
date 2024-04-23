@@ -15,6 +15,7 @@ Built a functional DataDownload.py for downloading seismic data from specified s
 Moving on to seismic data preprocessing in DataProcessing.py. <br />
 Doing more background reading and improving overall code design.<br />
 <br />
+
 ### 2024-04-19<b/> <br />
 Still working on preprocessing and denoising. <br />
 Looking for best parameters to produce clean seismic streams.<br />
@@ -26,3 +27,8 @@ FDSNWS service still unavailable. Used https://data.raspberryshake.org for data.
 Improved codes for outliers/ extreme values removal.  <br />
 Working on implementing a denoising algorithm. <br />
 Added a util.py for utility functions like getting lat and long of a given station.  <br />
+
+### 2024-04-23<b/> <br />
+Added a predict_arrivals() to predict arrival times of earthquakes identified from daily stream. <br />
+Planning to implement a module in the future to analysis noise pattern and output produce more "tailored" parameters for denoising. <br />
+Working on finding the best parameters for STA/ LTA window and threshold to better identify earthquake events. <br />
