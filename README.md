@@ -33,12 +33,12 @@ Planning to implement a module in the future to analysis noise pattern and outpu
 Working on finding the best parameters for STA/ LTA window and threshold to better identify earthquake events. <br />
 
 ### 2024-04-25<b/> <br />
-Major change to the overall design: <br />
-1. Program will attempt to identify earthquake with predicted time windows first instead of identifying events from entire day's stream.<br />
+Made major changes to overall designs: <br />
+1. Will attempt to identify earthquakes within predicted time windows first instead of identifying events from entire day's stream.<br />
 2. A DataFrame will be used to store all earthquake events to maintain consistency of formatting.<br />
-3. Combination of "catalogued" and "detected" column values would be used to represent the state of the event.<br />
+3. Combination of "catalogued" and "detected" column values are used to represent the state of the event.<br />
 
-Need to find a way to make sure events identified within time window is indeed the one we are looking for.<br />
+Need to find a way to make sure event identified within time window is indeed the one we are looking for.<br />
 Still working on finding best parameters for preprocessing/denosing.<br />
 
 
