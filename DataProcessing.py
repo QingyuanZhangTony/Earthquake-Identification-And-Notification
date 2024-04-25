@@ -1,24 +1,5 @@
 import numpy as np
 from obspy.signal.filter import bandpass
-import os
-from obspy import UTCDateTime
-from obspy import read
-
-
-def get_stream(date, station_info):
-    network, station, data_provider = station_info
-    dataset_folder = f"{network}.{station}"
-    cur_dir = os.getcwd()
-    # Include the 'data' directory in the path
-    data_dir = os.path.join(cur_dir, "data", dataset_folder)
-
-    # Find the mseed file with the specified date and station
-    file_name = f"{date.strftime('%Y-%m-%d')}_{network}.{station}..Z.mseed"
-    file_path = os.path.join(data_dir, file_name)
-
-    # Read the stream from the mseed file
-    stream = read(file_path)
-    return stream
 
 
 def remove_outliers(trace, threshold_factor=2):
@@ -47,5 +28,3 @@ def stream_process(stream):
     return stream
 
 
-def plot_graph(stream):
-    stream.plot()

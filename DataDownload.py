@@ -1,9 +1,12 @@
 # Dependencies
 import os
+import time
+from datetime import time
 from datetime import timedelta
 
 import matplotlib
 import requests
+from obspy import read
 
 matplotlib.rcParams['pdf.fonttype'] = 42  # to edit text in Illustrator
 import numpy as np
@@ -36,118 +39,95 @@ def download_seismic_data(date, station_info):
     # Check if the file already exists
     if not os.path.isfile(fn):
         print(f"Fetching data for {datestr}")
-        try:
-            # Request waveform data from the service
-            st = client.get_waveforms(network, station, location, channel,
-                                      UTCDateTime(date) - 1801, UTCDateTime(date) + 86400 + 1801,
-                                      attach_response=True)
-            # Merge any split traces
-            st.merge()
-            # Fill any gaps in the data
-            for tr in st:
-                if isinstance(tr.data, np.ma.masked_array):
-                    tr.data = tr.data.filled()
-            # Write the data to a miniSEED file
-            st.write(fn)
-            print(f"Data for {datestr} written successfully.")
-            return True
-        except FDSNNoDataException:
-            print(f"No data available for {datestr}.")
-            return False
-        except Exception as e:
-            print(f"An error occurred for {datestr}: {str(e)}")
-            return False
+        while True:
+            try:
+                # Request waveform data from the service
+                st = client.get_waveforms(network, station, location, channel,
+                                          UTCDateTime(date) - 3600, UTCDateTime(date) + 90000,
+                                          attach_response=True)
+                # Merge any split traces
+                st.merge()
+                # Fill any gaps in the data
+                for tr in st:
+                    if isinstance(tr.data, np.ma.masked_array):
+                        tr.data = tr.data.filled()
+                # Write the data to a miniSEED file
+                st.write(fn)
+                print(f"Data for {datestr} written successfully.")
+                return True
+            except FDSNNoDataException:
+                print(f"No data available for {datestr}.")
+                return False
+            except Exception as e:
+                if "429" in str(e) or "rate limit" in str(e).lower():
+                    print("Rate limit exceeded, waiting for 60 seconds.")
+                    time.sleep(60)
+                    continue
+                else:
+                    print(f"An error occurred for {datestr}: {str(e)}")
+                    return False
     else:
         print(f"Data for {datestr} already downloaded.")
         return True
 
 
-def download_seismic_data_all_channel(date, station_info):
-    network, station, data_provider = station_info
-    location = "*"
-    channel = "*Z*"
-    # Define the path for the 'data' directory within the current working directory
-    cur_dir = os.getcwd()
-    dataset_dir = os.path.join(cur_dir, "data", f"{network}.{station}")
+def download_response_file(station_info):
+    network, station, base_url = station_info
+    url = f"{base_url}/fdsnws/station/1/query?level=resp&network={network}&station={station}"
 
-    # Create the 'data/dataset' directory if it does not exist, including any intermediate directories
-    os.makedirs(dataset_dir, exist_ok=True)
+    # Define the directory path where the file will be saved
+    cur_dir = os.getcwd()  # Get the current working directory
+    data_dir = os.path.join(cur_dir, "data", f"{network}.{station}")
 
-    nslc = "{}.{}.{}.{}".format(network, station, location, channel).replace("*", "")
-    client = Client(data_provider)
-    datestr = date.strftime("%Y-%m-%d")
-    fn = os.path.join(dataset_dir, "{}_{}.mseed".format(datestr, nslc))
+    # Create the directory if it does not exist
+    os.makedirs(data_dir, exist_ok=True)
 
-    if not os.path.isfile(fn):
-        print(f"Fetching data for {datestr}")
-        try:
-            st = client.get_waveforms(network, station, location, channel,
-                                      UTCDateTime(date) - 1801, UTCDateTime(date) + 86400 + 1801,
-                                      attach_response=True)
-            st.merge()
-            for tr in st:
-                if isinstance(tr.data, np.ma.masked_array):
-                    tr.data = tr.data.filled()
-            st.write(fn)
-            print(f"Data for {datestr} written successfully.")
-            return True
-        except FDSNNoDataException:
-            print(f"No data available for {datestr}.")
-            return False
-        except Exception as e:
-            print(f"An error occurred for {datestr}: {str(e)}")
-            return False
-    else:
-        print(f"Data for {datestr} already downloaded.")
-        return True
-
-
-def download_from_raspberryshake(date, station_info):
-    network, station, service_url = station_info
-    location = ""
-    channel = "Z"  # Adjust based on the actual channel you need to fetch
-
-    # Directory and file naming
-    dataset = f"{network}.{station}"
-    cur_dir = os.getcwd()
-    dataset_dir = os.path.join(cur_dir, dataset)
-    if not os.path.exists(dataset_dir):
-        os.makedirs(dataset_dir)
-
-    # Construct filename and path
-    datestr = date.strftime("%Y-%m-%d")
-    filename = f"{datestr}_{network}.{station}..{channel}.mseed"
-    filepath = os.path.join(dataset_dir, filename)
-
-    # Check if the file already exists
-    if os.path.isfile(filepath):
-        print(f"Data for {datestr} already downloaded.")
-        return True
-
-    # Calculate start and end times
-    start_time = date - timedelta(days=0, minutes=30)  # 23:30 the day before
-    end_time = date + timedelta(days=1, minutes=30)  # 00:30 the day after
-
-    # Format times for the URL and filename
-    start_time_str = start_time.strftime('%Y-%m-%dT%H_%M_%S')
-    end_time_str = end_time.strftime('%Y-%m-%dT%H_%M_%S')
-
-    # Build the request URL
-    base_url = f"{service_url}/fdsnws/dataselect/1/query"
-    url = f"{base_url}?starttime={start_time_str}&endtime={end_time_str}&network={network}&station={station}"
+    # Define the file path
+    file_path = os.path.join(data_dir, f"{network}_{station}_response.xml")
 
     try:
-        # Send request to download data
+        # Send a GET request to the URL
         response = requests.get(url)
-        if response.status_code == 200 and response.content:
-            # Save the MiniSEED file
-            with open(filepath, 'wb') as f:
-                f.write(response.content)
-            print(f"Downloaded MiniSEED data to {filepath}")
-            return True
-        else:
-            print("No data returned from the server.")
-            return False
-    except requests.RequestException as e:
-        print(f"Failed to download MiniSEED data: {e}")
-        return False
+        response.raise_for_status()  # Check for HTTP errors
+
+        # Write the content to an XML file
+        with open(file_path, 'wb') as f:
+            f.write(response.content)
+        print(f"Response file saved as: {file_path}")
+        return file_path
+
+    except requests.HTTPError as http_err:
+        print(f"HTTP error occurred: {http_err}")
+        return None
+    except Exception as err:
+        print(f"An error occurred: {err}")
+        return None
+
+
+def download_seismic_data_range(station_info, start_date, end_date, download_function):
+    current_date = start_date
+
+    while current_date <= end_date:
+        utc_date = UTCDateTime(current_date)
+
+        successful_download = download_function(utc_date, station_info)
+        if not successful_download:
+            print(f"Download failed for {current_date}")
+
+        current_date += timedelta(days=1)
+
+
+def get_stream(date, station_info):
+    network, station, data_provider = station_info
+    dataset_folder = f"{network}.{station}"
+    cur_dir = os.getcwd()
+    # Include the 'data' directory in the path
+    data_dir = os.path.join(cur_dir, "data", dataset_folder)
+
+    # Find the mseed file with the specified date and station
+    file_name = f"{date.strftime('%Y-%m-%d')}_{network}.{station}..Z.mseed"
+    file_path = os.path.join(data_dir, file_name)
+
+    # Read the stream from the mseed file
+    stream = read(file_path)
+    return stream
