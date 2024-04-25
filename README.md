@@ -39,6 +39,8 @@ Made major changes to overall designs: <br />
 3. Combination of "catalogued" and "detected" column values are used to represent the state of the event.<br />
 4. Refer to flowchart for more details of code design.<br />
 
+Download function now download from 23:00 T-1 to 01:00 T+1, while catalogue returns events from 23:30 T-1 to 00:30 T+1 to avoid predicted time windows falling on empty stream. <br />
+
 Need to find a way to make sure event identified within time window is indeed the one we are looking for.<br />
 Still working on finding best parameters for preprocessing/denosing.<br />
 
