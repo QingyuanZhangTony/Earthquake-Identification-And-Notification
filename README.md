@@ -6,7 +6,7 @@ Run interactiveMain.ipynb for examples of latest progress.<br />
 
 ## Flowchart of Project/ Code Design
 This reflect my current design and progress and will be updated constantly.
-<img src="Flowchart.drawio.png" width="600"><br />
+<img src="Flowchart.drawio.png" width="750"><br />
 
 
 ## Progress Log
