@@ -37,6 +37,7 @@ Made major changes to overall designs: <br />
 1. Will attempt to identify earthquakes within predicted time windows first instead of identifying events from entire day's stream.<br />
 2. A DataFrame will be used to store all earthquake events to maintain consistency of formatting.<br />
 3. Combination of "catalogued" and "detected" column values are used to represent the state of the event.<br />
+4. Refer to flowchart for more details for code design.<br />
 
 Need to find a way to make sure event identified within time window is indeed the one we are looking for.<br />
 Still working on finding best parameters for preprocessing/denosing.<br />
