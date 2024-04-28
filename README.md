@@ -52,6 +52,6 @@ Added functions to plot predicted times and identified times on the waves for be
 <img src="misc/example_plot.png" width="650"><br />
 Added a basic function matching detected events with catalogued earthquakes by comparing times.  <br />
 Working on finding best parameters for STA/LTA and preprocessing/denosing.<br />
-Close to finish building up a skeleton of the project (hopefully). <br />
+Planning on building a real-time script to report latest events by continously monitoring a catalogue. This will generate emails for individual events captured on local stations<br />
 
 
