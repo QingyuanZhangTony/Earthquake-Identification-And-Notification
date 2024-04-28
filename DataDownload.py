@@ -1,8 +1,8 @@
 # Dependencies
+import datetime
 import os
 import time
 from datetime import time
-from datetime import timedelta
 
 import matplotlib
 import requests
@@ -104,19 +104,6 @@ def download_response_file(station_info):
         return None
 
 
-def download_seismic_data_range(station_info, start_date, end_date, download_function):
-    current_date = start_date
-
-    while current_date <= end_date:
-        utc_date = UTCDateTime(current_date)
-
-        successful_download = download_function(utc_date, station_info)
-        if not successful_download:
-            print(f"Download failed for {current_date}")
-
-        current_date += timedelta(days=1)
-
-
 def get_stream(date, station_info):
     network, station, data_provider = station_info
     dataset_folder = f"{network}.{station}"
@@ -131,3 +118,44 @@ def get_stream(date, station_info):
     # Read the stream from the mseed file
     stream = read(file_path)
     return stream
+
+
+def get_coordinates(station_info):
+    try:
+        if len(station_info) != 3:
+            raise ValueError(
+                "station_info list must contain exactly three elements: network, station, and service_url.")
+
+        network, station, service_url = station_info
+
+        # Create an instance of the FDSN client
+        client = Client(service_url)
+
+        # Get current time for the endtime to ensure the station metadata is up-to-date
+        endtime = UTCDateTime()
+
+        # Fetch station metadata
+        inventory = client.get_stations(network=network, station=station, endtime=endtime, level='station')
+
+        # Extract latitude and longitude from the inventory
+        station_info = inventory[0][0]  # Assumes only one station matches the query
+        latitude = station_info.latitude
+        longitude = station_info.longitude
+        return (latitude, longitude)
+    except Exception as e:
+        print(f"Error fetching station coordinates: {e}")
+        return None
+
+
+# For testing
+if __name__ == "__main__":
+
+    station_info = ['AM', 'R50D6', 'https://data.raspberryshake.org']
+    start_date = UTCDateTime("2023-06-19")
+
+    end_date = UTCDateTime()
+    num_days = (end_date - start_date) / (24 * 3600)
+    date_list = [start_date + datetime.timedelta(days=x) for x in range(int(num_days) + 1)]
+
+    for date in date_list:
+        download_seismic_data(date, station_info)

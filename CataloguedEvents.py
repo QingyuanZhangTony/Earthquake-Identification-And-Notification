@@ -1,46 +1,98 @@
+import matplotlib.pyplot as plt
 import obspy
-import obspy.geodetics.base
-import obspy.geodetics.base
 import obspy.geodetics.base
 import obspy.geodetics.base
 import pandas as pd
 from obspy import UTCDateTime
 from obspy.clients.fdsn import Client
+from obspy.clients.fdsn.header import FDSNException
 from obspy.taup import TauPyModel
 
 
-def find_earthquakes(fromwhere, latitude, longitude, date, radmin, radmax, minmag, maxmag):
+def find_earthquakes(catalogue_provider, latitude, longitude, date, radmin, radmax, minmag, maxmag):
     # Load client for the FDSN web service
-    client = Client(fromwhere)
+    try:
+        client = Client(catalogue_provider)
+    except Exception as e:
+        print(f"Failed to connect to FDSN service at {catalogue_provider}: {e}")
+        return None
 
     # Convert the base date from string to UTCDateTime and calculate start and end times
     base_date = UTCDateTime(date)
     starttime = base_date - 30 * 60  # 23:30 the day before (30 minutes to the previous day)
     endtime = base_date + (24 * 3600) + (30 * 60)  # 00:30 the day after (24 hours + 30 minutes)
 
-    # Query the client for earthquakes based on the calculated time window and other parameters
-    catalog = client.get_events(
-        latitude=latitude,
-        longitude=longitude,
-        minradius=radmin,
-        maxradius=radmax,
-        starttime=starttime,
-        endtime=endtime,
-        minmagnitude=minmag,
-        maxmagnitude=maxmag
-    )
+    try:
+        # Query the client for earthquakes based on the calculated time window and other parameters
+        catalog = client.get_events(
+            latitude=latitude,
+            longitude=longitude,
+            minradius=radmin,
+            maxradius=radmax,
+            starttime=starttime,
+            endtime=endtime,
+            minmagnitude=minmag,
+            maxmagnitude=maxmag
+        )
 
-    return catalog
+        # Check if the catalog is empty
+        if not catalog:
+            print(f"No earthquakes found for the given parameters.")
+            return None
+
+        return catalog
+
+    except FDSNException as e:
+        print(f"Error fetching earthquake data: {e}")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return None
 
 
-def predict_arrivals(catalog, station_coordinates):
-    # Load the TauP model for travel time predictions
+def print_catalogued(catalogued_earthquakes):
+    if catalogued_earthquakes:
+        print('Number of Identified Earthquakes:', len(catalogued_earthquakes))
+        print(catalogued_earthquakes)
+        catalogued_earthquakes.plot()
+        plt.show()
+        plt.close()  # Ensure that the matplotlib window closes after plotting.
+    else:
+        print('No earthquake data was returned or an error occurred.')
+
+
+def predict_arrival(event, station_coordinates):
     model = TauPyModel(model="iasp91")
-
-    # Extract latitude and longitude from the coordinates tuple
     station_latitude, station_longitude = station_coordinates
 
-    # Prepare a list to collect all earthquake data
+    event_latitude = event.origins[0].latitude
+    event_longitude = event.origins[0].longitude
+    event_time = event.origins[0].time
+
+    # Calculate the distance and azimuth between the earthquake and the station
+    distance_deg = obspy.geodetics.base.gps2dist_azimuth(
+        event_latitude, event_longitude,
+        station_latitude, station_longitude
+    )[0] / 1000.0 / 111.32  # Convert meters to degrees
+
+    # Get predicted arrival times
+    arrivals = model.get_ray_paths(
+        source_depth_in_km=event.origins[0].depth / 1000.0,
+        distance_in_degree=distance_deg,
+        phase_list=["P", "S"]
+    )
+
+    p_arrival, s_arrival = None, None
+    for arrival in arrivals:
+        if arrival.name == "P":
+            p_arrival = event_time + arrival.time
+        elif arrival.name == "S":
+            s_arrival = event_time + arrival.time
+
+    return p_arrival, s_arrival
+
+
+def create_df_with_prediction(catalog, station_coordinates):
     earthquake_info_list = []
 
     # Loop through each earthquake in the catalog
@@ -51,28 +103,8 @@ def predict_arrivals(catalog, station_coordinates):
         event_magnitude = event.magnitudes[0].mag
         event_mag_type = event.magnitudes[0].magnitude_type
 
-        # Calculate the distance and azimuth between the earthquake and the station
-        distance_deg = obspy.geodetics.base.gps2dist_azimuth(
-            event_latitude, event_longitude,
-            station_latitude, station_longitude
-        )[0] / 1000.0 / 111.32  # Convert meters to degrees
-
-        # Get predicted arrival times
-        arrivals = model.get_ray_paths(
-            source_depth_in_km=event.origins[0].depth / 1000.0,
-            distance_in_degree=distance_deg,
-            phase_list=["P", "S"]
-        )
-
-        # Initialize P and S arrival times
-        p_arrival, s_arrival = None, None
-
-        # Extract P and S arrival times
-        for arrival in arrivals:
-            if arrival.name == "P":
-                p_arrival = event_time + arrival.time
-            elif arrival.name == "S":
-                s_arrival = event_time + arrival.time
+        # Predict arrival times
+        p_arrival, s_arrival = predict_arrival(event, station_coordinates)
 
         # Collect earthquake data in a dictionary
         earthquake_data = {
@@ -81,10 +113,11 @@ def predict_arrivals(catalog, station_coordinates):
             "long": event_longitude,
             "mag": event_magnitude,
             "mag_type": event_mag_type,
-            "P_arrival": p_arrival.isoformat() if p_arrival else None,
-            "S_arrival": s_arrival.isoformat() if s_arrival else None,
+            "P_predict": p_arrival.isoformat() if p_arrival else None,
+            "S_predict": s_arrival.isoformat() if s_arrival else None,
             "catalogued": True,
-            "detected": False  # Initial value set as False
+            "detected": False,
+            "detected_start": None
         }
 
         # Append the dictionary to the list
@@ -93,9 +126,3 @@ def predict_arrivals(catalog, station_coordinates):
     # Convert the list of dictionaries to a DataFrame
     df = pd.DataFrame(earthquake_info_list)
     return df
-
-# Example usage:
-# catalog = ...  # Your catalog data goes here
-# station_coordinates = (latitude, longitude)  # Your station coordinates
-# df = predict_arrivals(catalog, station_coordinates)
-# print(df)
