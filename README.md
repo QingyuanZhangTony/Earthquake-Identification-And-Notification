@@ -44,4 +44,14 @@ Download function now download from 23:00 T-1 to 01:00 T+1, while catalogue retu
 Need to find a way to make sure event identified within time window is indeed the one we are looking for.<br />
 Still working on finding best parameters for preprocessing/denosing.<br />
 
+### 2024-04-28<b/> <br />
+Improved overall code logic.  <br />
+Redesigned flowchart for better representation of project design. Seprated code module design from flowchart.<br />
+Added "detected_start" column to DataFrame for storing observed starting time for catalogued earthquakes. <br />
+Added functions to plot predicted times and identified times on the waves for better visualization.  Example: <br />
+<img src="misc/example_plot.png" width="650"><br />
+Added a basic function matching detected events with catalogued earthquakes by comparing times.  <br />
+Working on finding best parameters for STA/LTA and preprocessing/denosing.<br />
+Close to finish building up a skeleton of the project (hopefully). <br />
+
 
