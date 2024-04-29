@@ -54,4 +54,10 @@ Added a basic function matching detected events with catalogued earthquakes by c
 Working on finding best parameters for STA/LTA and preprocessing/denosing.<br />
 Planning on building a real-time script to report latest events by continously monitoring a catalogue. This will generate emails for individual events captured on local stations<br />
 
+### 2024-04-29<b/> <br />
+Changed back to the more efficient way of analyzing the daily stream as whole.<br />
+The program now generates two dataframes: one for catalogued events and another for detected events.Then it performs a matching and merging process on these events.<br /> 
+Might try something like iterating over a range parameters to find the best parameter combinations to maximize the chance of detecting the events listed in the catalogue.<br /> 
+First group meeting coming up. Will stop progressing for now and prepare some slides or codes for a demo. <br /> 
+
 
