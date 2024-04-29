@@ -117,7 +117,8 @@ def create_df_with_prediction(catalog, station_coordinates):
             "S_predict": s_arrival.isoformat() if s_arrival else None,
             "catalogued": True,
             "detected": False,
-            "detected_start": None
+            "detected_start": None,
+            "detected_end": None
         }
 
         # Append the dictionary to the list
@@ -126,3 +127,5 @@ def create_df_with_prediction(catalog, station_coordinates):
     # Convert the list of dictionaries to a DataFrame
     df = pd.DataFrame(earthquake_info_list)
     return df
+
+
