@@ -58,6 +58,14 @@ Planning on building a real-time script to report latest events by continously m
 Changed back to the more efficient way of analyzing the daily stream as whole.<br />
 The program now generates two dataframes: one for catalogued events and another for detected events.Then it performs a matching and merging process on these events.<br /> 
 Might try something like iterating over a range parameters to find the best parameter combinations to maximize the chance of detecting the events listed in the catalogue.<br /> 
-First group meeting coming up. Will stop progressing for now and prepare some slides or codes for a demo. <br /> 
+
+### 2024-04-30<b/> <br />
+Major changes: <br /> 
+Implemented pre-trained deep learning models from [SeisBench](https://github.com/seisbench/seisbench) for denosing and event detection/ phase picker. Seems to work quite well (and fast). <br /> 
+Pre-trained models could identify wave phases and produce confidence scores for the predictions, so we have a more precise way of match and merging the events.<br /> 
+Other changes: <br /> 
+Now the codes request events from multiple catalogues in case service denied/ down. If all failed, it will sleep for 60s and retry. <br /> 
+
+
 
 
