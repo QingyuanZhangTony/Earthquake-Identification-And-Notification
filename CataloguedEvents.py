@@ -3,62 +3,93 @@ import obspy
 import obspy.geodetics.base
 import obspy.geodetics.base
 import pandas as pd
-from obspy import UTCDateTime
-from obspy.clients.fdsn import Client
-from obspy.clients.fdsn.header import FDSNException
+
 from obspy.taup import TauPyModel
 
+from obspy.clients.fdsn import Client
+from obspy import UTCDateTime
+from obspy.clients.fdsn.header import FDSNException
 
-def find_earthquakes(catalogue_provider, latitude, longitude, date, radmin, radmax, minmag, maxmag):
-    # Load client for the FDSN web service
-    try:
-        client = Client(catalogue_provider)
-    except Exception as e:
-        print(f"Failed to connect to FDSN service at {catalogue_provider}: {e}")
-        return None
+import time
+from obspy.clients.fdsn import Client
+from obspy.core import UTCDateTime
+from obspy.clients.fdsn.header import FDSNException
+
+
+def find_earthquakes(catalogue_providers, coordinates, date, radmin, radmax, minmag, maxmag):
+    # Handle multiple catalogue providers
+    if isinstance(catalogue_providers, str):
+        catalogue_providers = [catalogue_providers]
 
     # Convert the base date from string to UTCDateTime and calculate start and end times
-    base_date = UTCDateTime(date)
+    try:
+        base_date = UTCDateTime(date)
+    except Exception as e:
+        print(f"Error parsing the date '{date}': {e}")
+        return None
+
     starttime = base_date - 30 * 60  # 23:30 the day before (30 minutes to the previous day)
     endtime = base_date + (24 * 3600) + (30 * 60)  # 00:30 the day after (24 hours + 30 minutes)
 
-    try:
-        # Query the client for earthquakes based on the calculated time window and other parameters
-        catalog = client.get_events(
-            latitude=latitude,
-            longitude=longitude,
-            minradius=radmin,
-            maxradius=radmax,
-            starttime=starttime,
-            endtime=endtime,
-            minmagnitude=minmag,
-            maxmagnitude=maxmag
-        )
+    # Station coordinates
+    latitude, longitude = coordinates
 
-        # Check if the catalog is empty
-        if not catalog:
-            print(f"No earthquakes found for the given parameters.")
-            return None
+    attempts = 2  # Number of attempts to try fetching data
 
-        return catalog
+    for attempt in range(attempts):
+        for provider in catalogue_providers:
+            try:
+                client = Client(provider)
+                catalog = client.get_events(
+                    latitude=latitude,
+                    longitude=longitude,
+                    minradius=radmin,
+                    maxradius=radmax,
+                    starttime=starttime,
+                    endtime=endtime,
+                    minmagnitude=minmag,
+                    maxmagnitude=maxmag
+                )
+                # Check if the catalog is empty
+                if not catalog:
+                    print(f"No earthquakes found for {provider} within the given parameters.")
+                    continue
+                print(f"Events received from {provider}.")
+                return catalog
 
-    except FDSNException as e:
-        print(f"Error fetching earthquake data: {e}")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return None
+            except FDSNException as e:
+                print(f"Error fetching earthquake data from {provider}: {e}")
+                continue
+            except Exception as e:
+                print(f"An unexpected error occurred when connecting to {provider}: {e}")
+                continue
+
+        # If it's the last attempt, don't sleep
+        if attempt < attempts - 1:
+            print(f"No data received from any providers. Retrying in 60 seconds...")
+            time.sleep(60)
+
+    print("Failed to retrieve earthquake data from all provided catalog sources after retries.")
+    return None
 
 
 def print_catalogued(catalogued_earthquakes):
     if catalogued_earthquakes:
-        print('Number of Identified Earthquakes:', len(catalogued_earthquakes))
         print(catalogued_earthquakes)
+        print()
+    else:
+        print('No earthquake data was returned or an error occurred.')
+        print()
+
+
+def plot_catalogued(catalogued_earthquakes):
+    if catalogued_earthquakes:
         catalogued_earthquakes.plot()
         plt.show()
         plt.close()  # Ensure that the matplotlib window closes after plotting.
     else:
         print('No earthquake data was returned or an error occurred.')
+        print()
 
 
 def predict_arrival(event, station_coordinates):
@@ -73,7 +104,7 @@ def predict_arrival(event, station_coordinates):
     distance_deg = obspy.geodetics.base.gps2dist_azimuth(
         event_latitude, event_longitude,
         station_latitude, station_longitude
-    )[0] / 1000.0 / 111.32  # Convert meters to degrees
+    )[0] / 1000.0 / 111.195  # Convert meters to degrees
 
     # Get predicted arrival times
     arrivals = model.get_ray_paths(
@@ -113,12 +144,12 @@ def create_df_with_prediction(catalog, station_coordinates):
             "long": event_longitude,
             "mag": event_magnitude,
             "mag_type": event_mag_type,
-            "P_predict": p_arrival.isoformat() if p_arrival else None,
-            "S_predict": s_arrival.isoformat() if s_arrival else None,
+            "P_predict": p_arrival.isoformat(),
+            "S_predict": s_arrival.isoformat(),
             "catalogued": True,
             "detected": False,
-            "detected_start": None,
-            "detected_end": None
+            "P_detected": None,
+            "S_detected": None
         }
 
         # Append the dictionary to the list
@@ -127,5 +158,3 @@ def create_df_with_prediction(catalog, station_coordinates):
     # Convert the list of dictionaries to a DataFrame
     df = pd.DataFrame(earthquake_info_list)
     return df
-
-

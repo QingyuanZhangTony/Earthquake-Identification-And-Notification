@@ -1,12 +1,10 @@
-import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.dates import DateFormatter
-from matplotlib.ticker import MaxNLocator
-from obspy import UTCDateTime
+import seisbench.models as sbm
+from obspy.core import UTCDateTime
 from obspy.signal.trigger import classic_sta_lta, trigger_onset
 
 
-def detect_earthquakes(stream, sta_window, lta_window, threshold_on, threshold_off):
+def detect_sta_lta(stream, sta_window, lta_window, threshold_on, threshold_off):
     # This list will store the dictionaries with start and end times of all detected earthquakes
     detected_earthquakes = []
 
@@ -33,54 +31,82 @@ def detect_earthquakes(stream, sta_window, lta_window, threshold_on, threshold_o
     return df
 
 
-def match_and_merge(df_catalogued, df_detected):
-    time_tolerance = 10  # Tolerance for time difference in seconds
+def print_detected(df_detected):
+    if not df_detected.empty:
+        print('Number of Earthquakes Detected :', len(df_detected))
+        print()
+    else:
+        print('No earthquake detected or an error occurred.')
+        print()
 
-    # Iterate over each earthquake in the catalog
+
+def match_and_merge(df_catalogued, df_detected, time_tolerance):
+    # Copy detected data to track unmatched detections
+    remaining_det = df_detected.copy()
+
+    # Iterate over each earthquake event in the catalog
     for index, row in df_catalogued.iterrows():
         p_time = UTCDateTime(row['P_predict']) if pd.notna(row['P_predict']) else None
         s_time = UTCDateTime(row['S_predict']) if pd.notna(row['S_predict']) else None
 
-        # Initialize the earliest and latest times for matched earthquakes
-        earliest_time = None
-        latest_time = None
+        # Initialize variables to track the highest confidence and corresponding times
+        highest_p_confidence = 0
+        highest_s_confidence = 0
+        p_detected = None
+        s_detected = None
 
-        # Iterate over detected earthquakes
+        # Iterate over detected earthquakes to match P and S waves
         matched_indices = []
-        for d_index, d_row in df_detected.iterrows():
-            detected_start = UTCDateTime(d_row['detected_start'])
-            detected_end = UTCDateTime(d_row['detected_end'])
+        for d_index, d_row in remaining_det.iterrows():
+            detected_time = UTCDateTime(d_row['peak_time'])
+            detected_phase = d_row['phase']
+            detected_confidence = d_row['peak_confidence']
 
-            # Check the time difference
-            if (p_time and abs(detected_start - p_time) <= time_tolerance) or \
-                    (s_time and abs(detected_start - s_time) <= time_tolerance):
-                # Update the earliest and latest times
-                if earliest_time is None or detected_start < earliest_time:
-                    earliest_time = detected_start
-                if latest_time is None or detected_end > latest_time:
-                    latest_time = detected_end
-
-                # Record the indices of matched detections for later removal
+            # Match P wave
+            if detected_phase == 'P' and p_time and abs(detected_time - p_time) <= time_tolerance:
+                if detected_confidence > highest_p_confidence:
+                    highest_p_confidence = detected_confidence
+                    p_detected = detected_time
                 matched_indices.append(d_index)
 
-        # If matched earthquakes are found, update the catalog record
-        if earliest_time and latest_time:
+            # Match S wave
+            elif detected_phase == 'S' and s_time and abs(detected_time - s_time) <= time_tolerance:
+                if detected_confidence > highest_s_confidence:
+                    highest_s_confidence = detected_confidence
+                    s_detected = detected_time
+                matched_indices.append(d_index)
+
+        # Update the catalog DataFrame with detected times and highest confidence
+        if p_detected:
+            df_catalogued.at[index, 'P_detected'] = p_detected.isoformat()
+            df_catalogued.at[index, 'peak_confidence'] = highest_p_confidence
             df_catalogued.at[index, 'detected'] = True
-            df_catalogued.at[index, 'detected_start'] = earliest_time.isoformat()
-            df_catalogued.at[index, 'detected_end'] = latest_time.isoformat()
+        if s_detected:
+            df_catalogued.at[index, 'S_detected'] = s_detected.isoformat()
+            df_catalogued.at[index, 'peak_confidence'] = highest_s_confidence
+            df_catalogued.at[index, 'detected'] = True
 
-        # Remove matched detection records
-        df_detected.drop(index=matched_indices, inplace=True)
+        # Remove matched detections from remaining detections
+        remaining_det.drop(index=matched_indices, inplace=True)
 
-    # Unmatched detected records are added as new entries to the catalog
-    unmatched_earthquakes = df_detected.copy()
-    unmatched_earthquakes['catalogued'] = False
-    unmatched_earthquakes['detected'] = True  # Ensure 'detected' is set to True
+    # Add unmatched detections to the catalog
+    new_rows = []
+    for _, d_row in remaining_det.iterrows():
+        new_row = {
+            'catalogued': False,
+            'detected': True,
+            'P_detected': d_row['peak_time'].isoformat() if d_row['phase'] == 'P' else None,
+            'S_detected': d_row['peak_time'].isoformat() if d_row['phase'] == 'S' else None,
+            'peak_confidence': d_row['peak_confidence']  # Directly move peak confidence
+        }
+        new_rows.append(new_row)
 
-    # Merge the catalog DataFrame with unmatched detected DataFrame
-    df_all_events = pd.concat([df_catalogued, unmatched_earthquakes], ignore_index=True)
+    if new_rows:
+        df_merged = pd.concat([df_catalogued, pd.DataFrame(new_rows)], ignore_index=True)
+    else:
+        df_merged = df_catalogued.copy()
 
-    return df_all_events
+    return df_merged
 
 
 def print_statistics(df):
@@ -94,8 +120,40 @@ def print_statistics(df):
     detected_not_in_catalogue = df[df['catalogued'] == False].shape[0]
 
     # Print the results
-    print("Earthquake Detection Statistics:")
-    print("-------------------------------")
     print(f"Detected in Catalogue: {detected_in_catalogue}")
     print(f"Not Detected in Catalogue: {not_detected_in_catalogue}")
     print(f"Detected but Not in Catalogue: {detected_not_in_catalogue}")
+    print()
+
+
+def detect_pretrained_picker(stream):
+    eqt_model = sbm.EQTransformer.from_pretrained("original")
+    outputs = eqt_model.classify(stream)
+    data = []
+
+    for pick in outputs.picks:
+        pick_dict = pick.__dict__
+        pick_data = {
+            #"detected_start": pick_dict["start_time"],
+            #"detected_end": pick_dict["end_time"],
+            "peak_time": pick_dict["peak_time"],
+            "peak_confidence": pick_dict["peak_value"],
+            "phase": pick_dict["phase"]
+        }
+
+        data.append(pick_data)
+
+    df_picks = pd.DataFrame(data)
+
+    return df_picks
+
+
+def filter_confidence(result_df, confidence_threshold):
+    condition = (result_df['catalogued'] == False) & \
+                (result_df['detected'] == True) & \
+                (result_df['peak_confidence'] < confidence_threshold)
+
+    # Delete rows that meet the criteria
+    result_df = result_df[~condition]
+
+    return result_df
