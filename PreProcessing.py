@@ -6,6 +6,7 @@ import pandas as pd
 from obspy import UTCDateTime, Stream
 from obspy.signal.filter import bandpass
 import seisbench.models as sbm
+import torch
 
 
 def remove_outliers_threshold(trace, threshold_factor=2):
@@ -108,6 +109,11 @@ def remove_outliers_window_optimized(trace, window_size=10, threshold_factor=1.5
     return trace
 
 
+def deep_denoiser(stream, model):
+    annotations = model.annotate(stream)
+    return annotations
+
+
 def stream_process(stream):
     # Remove the mean and linear trend from the data
     stream.detrend("demean")
@@ -116,88 +122,9 @@ def stream_process(stream):
     for trace in stream:
         # Remove outliers from the trace
         trace = remove_outliers_threshold(trace)
-        #trace = remove_outliers_IQR(trace)
+
         # Apply a bandpass filter to the trace data
         trace.data = bandpass(trace.data, freqmin=1, freqmax=40, df=trace.stats.sampling_rate, corners=5)
 
     # Return the processed stream
     return stream
-
-
-def extract_trace_inside_window(df, stream):
-    extracted_segments = Stream()  # Initialize an empty Stream to hold the segments
-
-    # Loop through each earthquake event in the DataFrame
-    for index, row in df.iterrows():
-        # Make sure P_predict and S_predict are not NaN
-        if pd.isna(row['P_predict']) or pd.isna(row['S_predict']):
-            continue
-
-        p_arrival = UTCDateTime(row['P_predict'])
-        s_arrival = UTCDateTime(row['S_predict'])
-
-        # Define a buffer time around the P and S wave arrivals to visualize pre-arrival activity
-        buffer_time = 45  # seconds
-
-        # Calculate start and end times for the waveform extraction
-        start_time = p_arrival - buffer_time
-        end_time = s_arrival + buffer_time
-
-        # Extract the waveform segment from the stream
-        waveform_segment = stream.slice(start_time, end_time)
-
-        # Add the extracted waveform segments to the new Stream object
-        extracted_segments += waveform_segment
-
-    return extracted_segments
-
-
-def extract_trace_outside_window(df, stream):
-    remaining_segments = Stream()  # Initialize an empty Stream to hold the segments
-
-    # First, collect all the time windows
-    time_windows = []
-    for index, row in df.iterrows():
-        if pd.isna(row['P_predict']) or pd.isna(row['S_predict']):
-            continue
-
-        p_arrival = UTCDateTime(row['P_predict'])
-        s_arrival = UTCDateTime(row['S_predict'])
-        buffer_time = 45  # seconds
-
-        start_time = p_arrival - buffer_time
-        end_time = s_arrival + buffer_time
-        time_windows.append((start_time, end_time))
-
-    # Sort time windows by start time
-    time_windows.sort()
-
-    # Compute the complementary intervals
-    # Assume the stream has an overall start and end time
-    stream_start = stream[0].stats.starttime
-    stream_end = stream[-1].stats.endtime
-
-    # Start by assuming we take everything from the beginning
-    # of the stream to the start of the first window
-    if time_windows:
-        if stream_start < time_windows[0][0]:
-            remaining_segments += stream.slice(stream_start, time_windows[0][0])
-
-    # Now handle the gaps between the windows
-    for i in range(len(time_windows) - 1):
-        gap_start = time_windows[i][1]
-        gap_end = time_windows[i + 1][0]
-        if gap_start < gap_end:
-            remaining_segments += stream.slice(gap_start, gap_end)
-
-    # Finally, handle the interval from the end of the last window to the end of the stream
-    if time_windows and stream_end > time_windows[-1][1]:
-        remaining_segments += stream.slice(time_windows[-1][1], stream_end)
-
-    return remaining_segments
-
-
-def deep_denoiser(stream):
-    model = sbm.DeepDenoiser.from_pretrained("original")
-    annotations = model.annotate(stream)
-    return annotations

@@ -1,76 +1,91 @@
+import os
+
 import matplotlib.pyplot as plt
 import obspy
 import obspy.geodetics.base
 import obspy.geodetics.base
 import pandas as pd
-
+from obspy import read_events, UTCDateTime
+from obspy.clients.fdsn import Client
+from obspy.clients.fdsn.header import FDSNException
 from obspy.taup import TauPyModel
 
-from obspy.clients.fdsn import Client
-from obspy import UTCDateTime
-from obspy.clients.fdsn.header import FDSNException
 
-import time
-from obspy.clients.fdsn import Client
-from obspy.core import UTCDateTime
-from obspy.clients.fdsn.header import FDSNException
-
-
-def find_earthquakes(catalogue_providers, coordinates, date, radmin, radmax, minmag, maxmag):
-    # Handle multiple catalogue providers
-    if isinstance(catalogue_providers, str):
-        catalogue_providers = [catalogue_providers]
-
-    # Convert the base date from string to UTCDateTime and calculate start and end times
+def request_catalogue(catalogue_providers, coordinates, date, radmin, radmax, minmag, maxmag, overwrite=False):
+    # Convert the date from string to UTCDateTime
     try:
         base_date = UTCDateTime(date)
     except Exception as e:
-        print(f"Error parsing the date '{date}': {e}")
+        print(f"Error parsing date '{date}': {e}")
         return None
 
-    starttime = base_date - 30 * 60  # 23:30 the day before (30 minutes to the previous day)
-    endtime = base_date + (24 * 3600) + (30 * 60)  # 00:30 the day after (24 hours + 30 minutes)
+    starttime = base_date - 30 * 60  # 23:30 the day before
+    endtime = base_date + (24 * 3600) + (30 * 60)  # 00:30 the day after
 
-    # Station coordinates
+    # Directory path
+    cur_dir = os.getcwd()
+    data_dir = os.path.join(cur_dir, "data", "catalogue")
+    os.makedirs(data_dir, exist_ok=True)
+
+    # File naming using latitude and longitude
     latitude, longitude = coordinates
+    lat_lon_str = f"{latitude:.2f}_{longitude:.2f}".replace(".", "p")
+    datestr = base_date.strftime("%Y-%m-%d")
 
-    attempts = 2  # Number of attempts to try fetching data
+    for provider in catalogue_providers:
+        filename = f"{datestr}_{provider}.xml"
+        filepath = os.path.join(data_dir, filename)
 
-    for attempt in range(attempts):
-        for provider in catalogue_providers:
-            try:
-                client = Client(provider)
-                catalog = client.get_events(
-                    latitude=latitude,
-                    longitude=longitude,
-                    minradius=radmin,
-                    maxradius=radmax,
-                    starttime=starttime,
-                    endtime=endtime,
-                    minmagnitude=minmag,
-                    maxmagnitude=maxmag
-                )
-                # Check if the catalog is empty
-                if not catalog:
-                    print(f"No earthquakes found for {provider} within the given parameters.")
-                    continue
-                print(f"Events received from {provider}.")
-                return catalog
+        # Check file existence and overwrite parameter
+        if os.path.isfile(filepath) and not overwrite:
+            print(f"Catalogue for {datestr} already exists.")
+            return filepath
 
-            except FDSNException as e:
-                print(f"Error fetching earthquake data from {provider}: {e}")
-                continue
-            except Exception as e:
-                print(f"An unexpected error occurred when connecting to {provider}: {e}")
-                continue
+        # Attempt to fetch data from each provider
+        try:
+            client = Client(provider)
+            catalog = client.get_events(
+                latitude=latitude,
+                longitude=longitude,
+                minradius=radmin,
+                maxradius=radmax,
+                starttime=starttime,
+                endtime=endtime,
+                minmagnitude=minmag,
+                maxmagnitude=maxmag
+            )
 
-        # If it's the last attempt, don't sleep
-        if attempt < attempts - 1:
-            print(f"No data received from any providers. Retrying in 60 seconds...")
-            time.sleep(60)
+            if catalog:
+                # Save the catalog as a QuakeML file
+                catalog.write(filepath, format="QUAKEML")
+                print(f"Catalog saved to {filepath}")
+                return filepath
+            else:
+                print(f"No earthquakes found using the specified parameters from {provider}.")
 
-    print("Failed to retrieve earthquake data from all provided catalog sources after retries.")
+        except FDSNException as e:
+            print(f"Error fetching earthquake data from {provider}: {e}")
+        except Exception as e:
+            print(f"Unexpected error occurred when connecting to {provider}: {e}")
+
+    print("Failed to retrieve earthquake data from all provided catalog sources.")
     return None
+
+
+def load_earthquake_catalog(filepath):
+    # Check if the specified file exists
+    if os.path.isfile(filepath):
+        print(f"Loading catalogue from path.")
+        try:
+            # Read the QuakeML file
+            catalog = read_events(filepath)
+            return catalog
+        except Exception as e:
+            print(f"Failed to read the catalog file: {e}")
+            return None
+    else:
+        print(f"No catalog file found at {filepath}")
+        return None
 
 
 def print_catalogued(catalogued_earthquakes):

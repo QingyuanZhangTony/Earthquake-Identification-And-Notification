@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter, AutoDateLocator
 from obspy import UTCDateTime
+from DataDownload import *
+from obspy.geodetics import gps2dist_azimuth
+from EventIdentification import *
 
 
 def plot_with_timestamps(trace, detected_p_time, detected_s_time, predicted_p_time, predicted_s_time, earthquake_info):
@@ -15,10 +18,12 @@ def plot_with_timestamps(trace, detected_p_time, detected_s_time, predicted_p_ti
     # Mark actual detected P and S times with vertical line
     if detected_p_time:
         detected_p_time_utc = UTCDateTime(detected_p_time)
-        ax.axvline(x=detected_p_time_utc .matplotlib_date, color='red', linestyle="--", label='Detected Start', linewidth=0.8)
+        ax.axvline(x=detected_p_time_utc.matplotlib_date, color='red', linestyle="--", label='Detected Start',
+                   linewidth=0.8)
     if detected_s_time:
         detected_s_time_utc = UTCDateTime(detected_s_time)
-        ax.axvline(x=detected_s_time_utc .matplotlib_date, color='purple', linestyle="--", label='Detected Start', linewidth=0.8)
+        ax.axvline(x=detected_s_time_utc.matplotlib_date, color='purple', linestyle="--", label='Detected Start',
+                   linewidth=0.8)
 
     # Mark predicted P and S time with vertical line
     if predicted_p_time:
@@ -55,24 +60,78 @@ def plot_with_timestamps(trace, detected_p_time, detected_s_time, predicted_p_ti
     plt.show()
 
 
-def create_trace_from_stream(stream, start_time, end_time, window_before, window_after):
-    starttime = UTCDateTime(start_time) - window_before
-    endtime = UTCDateTime(end_time) + window_after
+def plot_spectrogram(trace):
+    # 创建图形
+    fig = plt.figure(figsize=(9, 3))
+    # 生成频谱图
+    trace.spectrogram(log=True, title='Spectrogram')
+    plt.show()
+
+
+def create_trace_from_stream(stream, start_time, end_time):
+    starttime = UTCDateTime(start_time) - 60
+    endtime = UTCDateTime(end_time) + 60
     return stream.slice(starttime=starttime, endtime=endtime).copy()
 
 
-def catalogued_and_detected_plot(df, stream):
+def get_earthquake_info(row):
+    earthquake_info = {
+        "time": row['time'],
+        "lat": row['lat'],
+        "long": row['long'],
+        "mag": row['mag'],
+        "mag_type": row['mag_type'],
+        "peak_confidence": row.get('peak_confidence', None)  # Use .get for safety in case the column might not exist
+    }
+    return earthquake_info
+
+
+def successful_visualize(df, stream):
     filtered_events = df[(df['catalogued'] == True) & (df['detected'] == True)]
 
     for _, row in filtered_events.iterrows():
-        earthquake_info = {
-            "time": row['time'],
-            "lat": row['lat'],
-            "long": row['long'],
-            "mag": row['mag'],
-            "mag_type": row['mag_type'],
-        }
-        trace = create_trace_from_stream(stream, row['P_predict'], row['S_predict'], 60, 60)
+        earthquake_info = get_earthquake_info(row)  # Use the new function to get earthquake info
+        trace = create_trace_from_stream(stream, row['P_predict'], row['S_predict'])
         if trace.count() == 0:
             continue
-        plot_with_timestamps(trace[0], row['P_detected'], row['S_detected'], row['P_predict'], row['S_predict'], earthquake_info)
+        plot_with_timestamps(trace[0], row['P_detected'], row['S_detected'], row['P_predict'], row['S_predict'],
+                             earthquake_info)
+
+
+def successful_stats(df, stream, station_info):
+    filtered_events = df[(df['catalogued'] == True) & (df['detected'] == True)]
+
+    station_coordinates = get_coordinates(station_info)
+
+    for _, row in filtered_events.iterrows():
+        earthquake_info = get_earthquake_info(row)  # Use the new function to get earthquake info
+        trace = create_trace_from_stream(stream, row['P_predict'], row['S_predict'])
+        if trace.count() == 0:
+            continue
+        print_event_statistics(earthquake_info, station_coordinates)
+
+
+def calculate_distance(station_coordinates, epicenter_coordinates):
+    distance_meters, azimuth, back_azimuth = gps2dist_azimuth(
+        station_coordinates[0], station_coordinates[1],  # Station latitude and longitude
+        epicenter_coordinates[0], epicenter_coordinates[1]  # Epicenter latitude and longitude
+    )
+    distance_kilometers = distance_meters / 1000.0
+    return distance_kilometers
+
+
+def print_event_statistics(earthquake_info, station_coordinates):
+    epicenter_coordinates = (earthquake_info['lat'], earthquake_info['long'])
+    distance_kilometers = calculate_distance(station_coordinates, epicenter_coordinates)
+
+    print(f"Earthquake Time: {earthquake_info['time']}")
+    print(f"Location: Lat {earthquake_info['lat']}, Long {earthquake_info['long']}")
+    print(f"Magnitude: {earthquake_info['mag']} {earthquake_info['mag_type']}")
+    print(f"Distance to Station: {distance_kilometers:.2f} km")
+    if 'peak_confidence' in earthquake_info:
+        print(f"Peak Confidence: {earthquake_info['peak_confidence']}")
+    else:
+        print("Peak Confidence: Data not available")
+    print("-" * 50)
+
+

@@ -1,7 +1,12 @@
+import numpy as np
 import pandas as pd
 import seisbench.models as sbm
+import torch
+from matplotlib import pyplot as plt
 from obspy.core import UTCDateTime
 from obspy.signal.trigger import classic_sta_lta, trigger_onset
+import torch
+import time
 
 
 def detect_sta_lta(stream, sta_window, lta_window, threshold_on, threshold_off):
@@ -126,16 +131,13 @@ def print_statistics(df):
     print()
 
 
-def detect_pretrained_picker(stream):
-    eqt_model = sbm.EQTransformer.from_pretrained("original")
-    outputs = eqt_model.classify(stream)
+def pretrained_phase_picking(stream, model):
+    outputs = model.classify(stream)
     data = []
 
     for pick in outputs.picks:
         pick_dict = pick.__dict__
         pick_data = {
-            #"detected_start": pick_dict["start_time"],
-            #"detected_end": pick_dict["end_time"],
             "peak_time": pick_dict["peak_time"],
             "peak_confidence": pick_dict["peak_value"],
             "phase": pick_dict["phase"]
@@ -157,3 +159,120 @@ def filter_confidence(result_df, confidence_threshold):
     result_df = result_df[~condition]
 
     return result_df
+
+
+def make_prediction(stream, model):
+    predictions = model.annotate(stream)
+    return predictions
+
+
+def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, predicted_p_time, predicted_s_time,
+                          earthquake_info):
+    start_time = trace.stats.starttime
+    end_time = trace.stats.endtime
+
+    color_dict = {"P": "C0", "S": "C1", "Detection": "C2"}
+
+    # Slice the trace and predictions to the specified time range
+    subst = trace.slice(start_time, end_time)
+    subpreds = predictions.slice(start_time, end_time)
+
+    # Create subplots with constrained_layout enabled to automatically adjust layout
+    fig, ax = plt.subplots(2, 1, figsize=(13, 6), sharex=True, gridspec_kw={'hspace': 0.05, 'height_ratios': [1, 1]},
+                           constrained_layout=True)
+
+    # Plot predictions
+    for pred_trace in subpreds:
+        model_name, pred_class = pred_trace.stats.channel.split("_")
+        if pred_class == "N":
+            continue  # Skip noise traces
+        c = color_dict.get(pred_class, "black")  # Use black as default color if not found
+        offset = pred_trace.stats.starttime - start_time
+        ax[1].plot(offset + pred_trace.times(), pred_trace.data, label=pred_class, c=c)
+
+    ax[1].set_ylabel("Model Predictions")
+    ax[1].legend(loc=2)
+    ax[1].set_ylim(0, 1.1)
+
+    # Plot the trace
+    ax[0].plot(subst.times(), subst.data / np.amax(np.abs(subst.data)), 'k', label=subst.stats.channel)
+
+    # Plot detected and predicted P and S times as vertical lines on the waveform plot
+    times = [detected_p_time, detected_s_time, predicted_p_time, predicted_s_time]
+    colors = ['red', 'purple', 'green', 'blue']
+    labels = ['Detected P Arrival', 'Detected S Arrival', 'Predicted P Arrival', 'Predicted S Arrival']
+    for t, color, label in zip(times, colors, labels):
+        if t:
+            t_utc = UTCDateTime(t)
+            ax[0].axvline(x=t_utc - start_time, color=color, linestyle="--", label=label, linewidth=0.8)
+
+    ax[0].set_title(f'Earthquake on {earthquake_info["time"]} - '
+                    f'Lat: {earthquake_info["lat"]}, Long: {earthquake_info["long"]} - '
+                    f'Magnitude: {earthquake_info["mag"]}')
+    ax[0].set_ylabel('Normalized Amplitude')
+    ax[1].set_xlabel('Time [s]')
+    ax[0].set_xlim(0, end_time - start_time)
+    ax[0].legend(loc='upper right')
+
+    # No need to call tight_layout because constrained_layout is used
+    plt.show()
+
+
+def plot_predictions(trace, predictions):
+    start_time = trace.stats.starttime
+    end_time = trace.stats.endtime
+
+    color_dict = {"P": "C0", "S": "C1", "Detection": "C2"}
+
+    # Slice the predictions to the specified time range
+    subpreds = predictions.slice(start_time, end_time)
+
+    fig, ax = plt.subplots(figsize=(10, 2))  # Adjusted figure size for a single subplot
+
+    # Plot predictions
+    for pred_trace in subpreds:
+        model_name, pred_class = pred_trace.stats.channel.split("_")
+        if pred_class == "N":
+            continue  # Skip noise traces
+        c = color_dict.get(pred_class, "black")  # Use black as default color if not found
+        offset = pred_trace.stats.starttime - start_time
+        ax.plot(offset + pred_trace.times(), pred_trace.data, label=pred_class, c=c)
+
+    ax.set_ylabel("Model Predictions")
+    ax.legend(loc=2)
+    ax.set_ylim(0, 1.1)
+    ax.set_xlabel('Time [s]')
+    ax.set_xlim(0, end_time - start_time)
+
+    plt.show()
+
+
+def enable_GPU(model):
+    if torch.cuda.is_available():
+        torch.backends.cudnn.enabled = False
+        model.cuda()
+        print("Running on GPU")
+    else:
+        print("NOT running on GPU")
+
+
+def test_model_performance(stream, model):
+    times = {}
+
+    if torch.cuda.is_available():
+        model.cuda()
+        start_time = time.time()
+        model.classify(stream)
+        times['GPU'] = time.time() - start_time
+        print("GPU time:", times['GPU'])
+        torch.cuda.empty_cache()
+    else:
+        print("CUDA is not available. Cannot run on GPU.")
+
+    model.cpu()  #
+    start_time = time.time()
+    model.classify(stream)
+    times['CPU'] = time.time() - start_time
+    print("CPU time:", times['CPU'])
+
+    return times
