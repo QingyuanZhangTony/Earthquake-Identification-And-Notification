@@ -81,7 +81,8 @@ def get_earthquake_info(row):
         "long": row['long'],
         "mag": row['mag'],
         "mag_type": row['mag_type'],
-        "peak_confidence": row.get('peak_confidence', None)  # Use .get for safety in case the column might not exist
+        "P_peak_confidence": row.get('P_peak_confidence', None),
+        "S_peak_confidence": row.get('S_peak_confidence', None)
     }
     return earthquake_info
 
@@ -128,10 +129,13 @@ def print_event_statistics(earthquake_info, station_coordinates):
     print(f"Location: Lat {earthquake_info['lat']}, Long {earthquake_info['long']}")
     print(f"Magnitude: {earthquake_info['mag']} {earthquake_info['mag_type']}")
     print(f"Distance to Station: {distance_kilometers:.2f} km")
-    if 'peak_confidence' in earthquake_info:
-        print(f"Peak Confidence: {earthquake_info['peak_confidence']}")
-    else:
-        print("Peak Confidence: Data not available")
-    print("-" * 50)
+
+    if 'P_peak_confidence' in earthquake_info:
+        print(f"P wave Confidence: {earthquake_info['P_peak_confidence']}")
+    if 'S_peak_confidence' in earthquake_info:
+        print(f"S wave Confidence: {earthquake_info['S_peak_confidence']}")
+    print('-' * 40)
+
+ 
 
 

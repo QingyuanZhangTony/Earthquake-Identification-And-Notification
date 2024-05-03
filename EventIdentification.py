@@ -46,55 +46,50 @@ def print_detected(df_detected):
 
 
 def match_and_merge(df_catalogued, df_detected, time_tolerance):
-    # Copy detected data to track unmatched detections
     remaining_det = df_detected.copy()
 
-    # Iterate over each earthquake event in the catalog
     for index, row in df_catalogued.iterrows():
         p_time = UTCDateTime(row['P_predict']) if pd.notna(row['P_predict']) else None
         s_time = UTCDateTime(row['S_predict']) if pd.notna(row['S_predict']) else None
 
-        # Initialize variables to track the highest confidence and corresponding times
         highest_p_confidence = 0
         highest_s_confidence = 0
         p_detected = None
         s_detected = None
+        p_matched_indices = []
+        s_matched_indices = []
 
-        # Iterate over detected earthquakes to match P and S waves
-        matched_indices = []
         for d_index, d_row in remaining_det.iterrows():
             detected_time = UTCDateTime(d_row['peak_time'])
             detected_phase = d_row['phase']
             detected_confidence = d_row['peak_confidence']
 
-            # Match P wave
             if detected_phase == 'P' and p_time and abs(detected_time - p_time) <= time_tolerance:
                 if detected_confidence > highest_p_confidence:
                     highest_p_confidence = detected_confidence
                     p_detected = detected_time
-                matched_indices.append(d_index)
+                p_matched_indices.append(d_index)
 
-            # Match S wave
-            elif detected_phase == 'S' and s_time and abs(detected_time - s_time) <= time_tolerance:
+            if detected_phase == 'S' and s_time and abs(detected_time - s_time) <= time_tolerance:
                 if detected_confidence > highest_s_confidence:
                     highest_s_confidence = detected_confidence
                     s_detected = detected_time
-                matched_indices.append(d_index)
+                s_matched_indices.append(d_index)
 
-        # Update the catalog DataFrame with detected times and highest confidence
         if p_detected:
             df_catalogued.at[index, 'P_detected'] = p_detected.isoformat()
-            df_catalogued.at[index, 'peak_confidence'] = highest_p_confidence
+            df_catalogued.at[index, 'P_peak_confidence'] = highest_p_confidence
             df_catalogued.at[index, 'detected'] = True
+
         if s_detected:
             df_catalogued.at[index, 'S_detected'] = s_detected.isoformat()
-            df_catalogued.at[index, 'peak_confidence'] = highest_s_confidence
+            df_catalogued.at[index, 'S_peak_confidence'] = highest_s_confidence
             df_catalogued.at[index, 'detected'] = True
 
-        # Remove matched detections from remaining detections
-        remaining_det.drop(index=matched_indices, inplace=True)
+        # Consolidate matched indices and remove duplicates
+        all_matched_indices = list(set(p_matched_indices + s_matched_indices))
+        remaining_det.drop(index=all_matched_indices, inplace=True, errors='ignore')
 
-    # Add unmatched detections to the catalog
     new_rows = []
     for _, d_row in remaining_det.iterrows():
         new_row = {
@@ -102,7 +97,7 @@ def match_and_merge(df_catalogued, df_detected, time_tolerance):
             'detected': True,
             'P_detected': d_row['peak_time'].isoformat() if d_row['phase'] == 'P' else None,
             'S_detected': d_row['peak_time'].isoformat() if d_row['phase'] == 'S' else None,
-            'peak_confidence': d_row['peak_confidence']  # Directly move peak confidence
+            'peak_confidence': d_row['peak_confidence']
         }
         new_rows.append(new_row)
 
@@ -112,6 +107,7 @@ def match_and_merge(df_catalogued, df_detected, time_tolerance):
         df_merged = df_catalogued.copy()
 
     return df_merged
+
 
 
 def print_statistics(df):
@@ -199,12 +195,13 @@ def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, 
 
     # Plot detected and predicted P and S times as vertical lines on the waveform plot
     times = [detected_p_time, detected_s_time, predicted_p_time, predicted_s_time]
-    colors = ['red', 'purple', 'green', 'blue']
+    colors = ['C0', 'C1', 'C0', 'C1']
+    styles = ['-', '-', '--', '--']  # Solid lines for detected, dashed lines for predicted
     labels = ['Detected P Arrival', 'Detected S Arrival', 'Predicted P Arrival', 'Predicted S Arrival']
-    for t, color, label in zip(times, colors, labels):
+    for t, color, style, label in zip(times, colors, styles, labels):
         if t:
             t_utc = UTCDateTime(t)
-            ax[0].axvline(x=t_utc - start_time, color=color, linestyle="--", label=label, linewidth=0.8)
+            ax[0].axvline(x=t_utc - start_time, color=color, linestyle=style, label=label, linewidth=0.8)
 
     ax[0].set_title(f'Earthquake on {earthquake_info["time"]} - '
                     f'Lat: {earthquake_info["lat"]}, Long: {earthquake_info["long"]} - '
@@ -214,7 +211,6 @@ def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, 
     ax[0].set_xlim(0, end_time - start_time)
     ax[0].legend(loc='upper right')
 
-    # No need to call tight_layout because constrained_layout is used
     plt.show()
 
 

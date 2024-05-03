@@ -10,6 +10,12 @@ from obspy.clients.fdsn import Client
 from obspy.clients.fdsn.header import FDSNException
 from obspy.taup import TauPyModel
 
+import os
+from obspy import UTCDateTime
+from obspy.clients.fdsn.header import FDSNException, FDSNNoDataException
+
+from obspy.clients.fdsn.header import URL_MAPPINGS
+
 
 def request_catalogue(catalogue_providers, coordinates, date, radmin, radmax, minmag, maxmag, overwrite=False):
     # Convert the date from string to UTCDateTime
@@ -63,6 +69,8 @@ def request_catalogue(catalogue_providers, coordinates, date, radmin, radmax, mi
             else:
                 print(f"No earthquakes found using the specified parameters from {provider}.")
 
+        except FDSNNoDataException as e:
+            print(f"No data available from {provider} for the requested parameters: {e}")
         except FDSNException as e:
             print(f"Error fetching earthquake data from {provider}: {e}")
         except Exception as e:
