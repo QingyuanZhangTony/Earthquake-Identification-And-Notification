@@ -74,9 +74,11 @@ Add some codes save catalogues to file and add check if catalgue for a date has 
 Save each day's final dataframe to csv files and generate email contents based on it.<br /> 
 
 ### 2024-05-02<b/> <br />
+Improved existing codes and fixed some issues. <br />
 Added GPU support. If CUDA is available, models will run on GPU for acceleration.  <br /> 
+Catalogues requested are saved to QuakeXML file. It will check if it already exists before requesting.<br /> 
 Added probability plotting of picked phases when visualizing the matched event. Example:  <br /> 
 <img src="misc/0502-1.png" width="650"><br />
-Improved existing codes. <br />
+
 
 
