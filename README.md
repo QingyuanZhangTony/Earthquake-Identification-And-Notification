@@ -80,5 +80,12 @@ Catalogues requested are saved to QuakeXML file. It will check if it already exi
 Added probability plotting of picked phases when visualizing the matched event. Example:  <br /> 
 <img src="misc/0502-1.png" width="650"><br />
 
+### 2024-05-04<b/> <br />
+DataFrame now contains unique event ID, depth, epicentral distance for catalogued events. <br /> 
+Added plot function for showing catalogued events and station on globe map. <br /> 
+Functions for downloading mseed files and catalogues now have the option to download again and overwrite already existing files. <br /> 
+Optimized a lot of existing codes. Deleted unused and old functions. <br /> 
+
+
 
 
