@@ -69,9 +69,6 @@ Other changes: <br />
 ### 2024-05-01<b/> <br />
 1. Tried different pre-trained models for phase picking. <br /> 
 2. Optimized existig codes for post-processing.  <br /> 
-Next steps: <br /> 
-Add some codes save catalogues to file and add check if catalgue for a date has already been requested before before requesting.  <br /> 
-Save each day's final dataframe to csv files and generate email contents based on it.<br /> 
 
 ### 2024-05-02<b/> <br />
 1. Improved existing codes and fixed some issues. <br />
