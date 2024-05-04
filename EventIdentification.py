@@ -1,12 +1,10 @@
 import numpy as np
 import pandas as pd
-import seisbench.models as sbm
-import torch
 from matplotlib import pyplot as plt
 from obspy.core import UTCDateTime
 from obspy.signal.trigger import classic_sta_lta, trigger_onset
-import torch
-import time
+
+from utils import *
 
 
 def detect_sta_lta(stream, sta_window, lta_window, threshold_on, threshold_off):
@@ -36,13 +34,36 @@ def detect_sta_lta(stream, sta_window, lta_window, threshold_on, threshold_off):
     return df
 
 
-def print_detected(df_detected):
-    if not df_detected.empty:
-        print('Number of Earthquakes Detected :', len(df_detected))
-        print()
-    else:
-        print('No earthquake detected or an error occurred.')
-        print()
+def pretrained_phase_picking(stream, model):
+    enable_GPU(model)
+
+    outputs = model.classify(stream)
+    predictions = []
+
+    for pick in outputs.picks:
+        pick_dict = pick.__dict__
+        pick_data = {
+            "peak_time": pick_dict["peak_time"],
+            "peak_confidence": pick_dict["peak_value"],
+            "phase": pick_dict["phase"]
+        }
+
+        predictions.append(pick_data)
+
+    df_picks = pd.DataFrame(predictions)
+
+    return df_picks
+
+
+def filter_confidence(result_df, confidence_threshold):
+    condition = (result_df['catalogued'] == False) & \
+                (result_df['detected'] == True) & \
+                (result_df['peak_confidence'] < confidence_threshold)
+
+    # Delete rows that meet the criteria
+    result_df = result_df[~condition]
+
+    return result_df
 
 
 def match_and_merge(df_catalogued, df_detected, time_tolerance):
@@ -109,8 +130,7 @@ def match_and_merge(df_catalogued, df_detected, time_tolerance):
     return df_merged
 
 
-
-def print_statistics(df):
+def print_matching_result(df):
     # Count detected events in the catalogue
     detected_in_catalogue = df[(df['detected'] == True) & (df['catalogued'] == True)].shape[0]
 
@@ -127,58 +147,36 @@ def print_statistics(df):
     print()
 
 
-def pretrained_phase_picking(stream, model):
-    outputs = model.classify(stream)
-    data = []
-
-    for pick in outputs.picks:
-        pick_dict = pick.__dict__
-        pick_data = {
-            "peak_time": pick_dict["peak_time"],
-            "peak_confidence": pick_dict["peak_value"],
-            "phase": pick_dict["phase"]
-        }
-
-        data.append(pick_data)
-
-    df_picks = pd.DataFrame(data)
-
-    return df_picks
-
-
-def filter_confidence(result_df, confidence_threshold):
-    condition = (result_df['catalogued'] == False) & \
-                (result_df['detected'] == True) & \
-                (result_df['peak_confidence'] < confidence_threshold)
-
-    # Delete rows that meet the criteria
-    result_df = result_df[~condition]
-
-    return result_df
-
-
 def make_prediction(stream, model):
+    enable_GPU(model)
     predictions = model.annotate(stream)
     return predictions
 
 
-def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, predicted_p_time, predicted_s_time,
+def plot_predictions_wave(stream, predictions, detected_p_time, detected_s_time, predicted_p_time, predicted_s_time,
                           earthquake_info):
-    start_time = trace.stats.starttime
-    end_time = trace.stats.endtime
+    # Convert start and end times to UTCDateTime and add/subtract 60 seconds buffer
+    starttime = UTCDateTime(predicted_p_time) - 60
+    endtime = UTCDateTime(predicted_s_time) + 60
+
+    # Slice the stream for the specific earthquake event
+    trace = stream.slice(starttime=starttime, endtime=endtime)
+
+    if not trace:
+        print("No data in the trace.")
+        return
+
+    start_time = trace[0].stats.starttime
+    end_time = trace[0].stats.endtime
 
     color_dict = {"P": "C0", "S": "C1", "Detection": "C2"}
 
-    # Slice the trace and predictions to the specified time range
-    subst = trace.slice(start_time, end_time)
-    subpreds = predictions.slice(start_time, end_time)
-
-    # Create subplots with constrained_layout enabled to automatically adjust layout
+    # Plot the trace
     fig, ax = plt.subplots(2, 1, figsize=(13, 6), sharex=True, gridspec_kw={'hspace': 0.05, 'height_ratios': [1, 1]},
                            constrained_layout=True)
 
     # Plot predictions
-    for pred_trace in subpreds:
+    for pred_trace in predictions:
         model_name, pred_class = pred_trace.stats.channel.split("_")
         if pred_class == "N":
             continue  # Skip noise traces
@@ -190,10 +188,9 @@ def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, 
     ax[1].legend(loc=2)
     ax[1].set_ylim(0, 1.1)
 
-    # Plot the trace
-    ax[0].plot(subst.times(), subst.data / np.amax(np.abs(subst.data)), 'k', label=subst.stats.channel)
+    ax[0].plot(trace[0].times(), trace[0].data / np.amax(np.abs(trace[0].data)), 'k', label=trace[0].stats.channel)
 
-    # Plot detected and predicted P and S times as vertical lines on the waveform plot
+    # Plot detected and predicted P and S times as vertical lines
     times = [detected_p_time, detected_s_time, predicted_p_time, predicted_s_time]
     colors = ['C0', 'C1', 'C0', 'C1']
     styles = ['-', '-', '--', '--']  # Solid lines for detected, dashed lines for predicted
@@ -203,9 +200,8 @@ def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, 
             t_utc = UTCDateTime(t)
             ax[0].axvline(x=t_utc - start_time, color=color, linestyle=style, label=label, linewidth=0.8)
 
-    ax[0].set_title(f'Earthquake on {earthquake_info["time"]} - '
-                    f'Lat: {earthquake_info["lat"]}, Long: {earthquake_info["long"]} - '
-                    f'Magnitude: {earthquake_info["mag"]}')
+    ax[0].set_title(
+        f'Earthquake on {earthquake_info["time"]} - Lat: {earthquake_info["lat"]}, Long: {earthquake_info["long"]} - Magnitude: {earthquake_info["mag"]}')
     ax[0].set_ylabel('Normalized Amplitude')
     ax[1].set_xlabel('Time [s]')
     ax[0].set_xlim(0, end_time - start_time)
@@ -214,61 +210,4 @@ def plot_predictions_wave(trace, predictions, detected_p_time, detected_s_time, 
     plt.show()
 
 
-def plot_predictions(trace, predictions):
-    start_time = trace.stats.starttime
-    end_time = trace.stats.endtime
 
-    color_dict = {"P": "C0", "S": "C1", "Detection": "C2"}
-
-    # Slice the predictions to the specified time range
-    subpreds = predictions.slice(start_time, end_time)
-
-    fig, ax = plt.subplots(figsize=(10, 2))  # Adjusted figure size for a single subplot
-
-    # Plot predictions
-    for pred_trace in subpreds:
-        model_name, pred_class = pred_trace.stats.channel.split("_")
-        if pred_class == "N":
-            continue  # Skip noise traces
-        c = color_dict.get(pred_class, "black")  # Use black as default color if not found
-        offset = pred_trace.stats.starttime - start_time
-        ax.plot(offset + pred_trace.times(), pred_trace.data, label=pred_class, c=c)
-
-    ax.set_ylabel("Model Predictions")
-    ax.legend(loc=2)
-    ax.set_ylim(0, 1.1)
-    ax.set_xlabel('Time [s]')
-    ax.set_xlim(0, end_time - start_time)
-
-    plt.show()
-
-
-def enable_GPU(model):
-    if torch.cuda.is_available():
-        torch.backends.cudnn.enabled = False
-        model.cuda()
-        print("Running on GPU")
-    else:
-        print("NOT running on GPU")
-
-
-def test_model_performance(stream, model):
-    times = {}
-
-    if torch.cuda.is_available():
-        model.cuda()
-        start_time = time.time()
-        model.classify(stream)
-        times['GPU'] = time.time() - start_time
-        print("GPU time:", times['GPU'])
-        torch.cuda.empty_cache()
-    else:
-        print("CUDA is not available. Cannot run on GPU.")
-
-    model.cpu()  #
-    start_time = time.time()
-    model.classify(stream)
-    times['CPU'] = time.time() - start_time
-    print("CPU time:", times['CPU'])
-
-    return times

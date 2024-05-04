@@ -1,20 +1,15 @@
-import os
-
+import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import obspy
 import obspy.geodetics.base
 import obspy.geodetics.base
 import pandas as pd
-from obspy import read_events, UTCDateTime
-from obspy.clients.fdsn import Client
+from obspy import read_events
 from obspy.clients.fdsn.header import FDSNException
+from obspy.geodetics import gps2dist_azimuth
 from obspy.taup import TauPyModel
 
-import os
-from obspy import UTCDateTime
-from obspy.clients.fdsn.header import FDSNException, FDSNNoDataException
-
-from obspy.clients.fdsn.header import URL_MAPPINGS
+from DataDownload import *
 
 
 def request_catalogue(catalogue_providers, coordinates, date, radmin, radmax, minmag, maxmag, overwrite=False):
@@ -84,6 +79,7 @@ def load_earthquake_catalog(filepath):
     # Check if the specified file exists
     if os.path.isfile(filepath):
         print(f"Loading catalogue from path.")
+        print('-' * 40)
         try:
             # Read the QuakeML file
             catalog = read_events(filepath)
@@ -105,14 +101,55 @@ def print_catalogued(catalogued_earthquakes):
         print()
 
 
-def plot_catalogued(catalogued_earthquakes):
-    if catalogued_earthquakes:
-        catalogued_earthquakes.plot()
-        plt.show()
-        plt.close()  # Ensure that the matplotlib window closes after plotting.
+def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fill_map):
+    network, station, data_provider = station_information  # Extract station details
+    latitude, longitude = get_coordinates(station_information)  # Assuming function exists to get coordinates
+
+    fig, ax = plt.subplots(figsize=(10, 7), subplot_kw={
+        'projection': ccrs.PlateCarree(central_longitude=longitude)
+    })
+    ax.set_global()
+    ax.coastlines()
+
+    # Optional map filling
+    if fill_map:
+        ax.stock_img()  # Adding a simple stock image
+        text_color = 'white'  # Text color when map is filled
+        station_color = '#7F27FF'  # Station color when map is filled
     else:
-        print('No earthquake data was returned or an error occurred.')
-        print()
+        text_color = 'black'  # Text color without fill
+        station_color = '#7F27FF'  # Station color without fill
+
+    # Plotting the station location with a special marker
+    ax.plot(longitude, latitude, marker='^', color=station_color, markersize=12, linestyle='None',
+            transform=ccrs.Geodetic(), label=f'Station {station}')
+
+    # Setup colormap and normalization
+    cmap = plt.get_cmap('viridis')
+    norm = plt.Normalize(1, 10)  # Fixed range from 1 to 10 for magnitude
+
+    for event in earthquake_catalogue:
+        if event.origins and event.magnitudes and event.origins[0] and event.origins[0].time:
+            origin = event.origins[0]
+            magnitude = event.magnitudes[0].mag
+            color = cmap(norm(magnitude))  # Get color from magnitude
+            ax.plot(origin.longitude, origin.latitude, marker='o', color=color, markersize=10,
+                    transform=ccrs.Geodetic())
+
+    # Prepare colorbar and set its position and size
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=30, fraction=0.066, shrink=0.65)
+    cbar.set_label('Magnitude')
+
+    title_date = catalogue_date.strftime('%Y-%m-%d')
+    title = f"Catalogued Events for {network}.{station} on {title_date}"
+    plt.title(title)
+
+    # Adding legend to show station marker
+    ax.legend(loc='upper right')
+
+    plt.show()
 
 
 def predict_arrival(event, station_coordinates):
@@ -146,27 +183,33 @@ def predict_arrival(event, station_coordinates):
     return p_arrival, s_arrival
 
 
-def create_df_with_prediction(catalog, station_coordinates):
+def process_catalogue(catalog, station_coordinates):
     earthquake_info_list = []
 
     # Loop through each earthquake in the catalog
     for event in catalog:
+        event_id = str(event.resource_id)
+        event_time = event.origins[0].time
         event_latitude = event.origins[0].latitude
         event_longitude = event.origins[0].longitude
-        event_time = event.origins[0].time
         event_magnitude = event.magnitudes[0].mag
         event_mag_type = event.magnitudes[0].magnitude_type
+        event_depth = event.origins[0].depth
+        epicentral_distance = calculate_distance(station_coordinates, [event_latitude, event_longitude])
 
         # Predict arrival times
         p_arrival, s_arrival = predict_arrival(event, station_coordinates)
 
         # Collect earthquake data in a dictionary
         earthquake_data = {
+            "event_id": event_id,
             "time": event_time.isoformat(),
             "lat": event_latitude,
             "long": event_longitude,
             "mag": event_magnitude,
             "mag_type": event_mag_type,
+            "depth": event_depth,
+            "epi_distance": epicentral_distance,
             "P_predict": p_arrival.isoformat(),
             "S_predict": s_arrival.isoformat(),
             "catalogued": True,
@@ -181,3 +224,12 @@ def create_df_with_prediction(catalog, station_coordinates):
     # Convert the list of dictionaries to a DataFrame
     df = pd.DataFrame(earthquake_info_list)
     return df
+
+
+def calculate_distance(station_coordinates, epicenter_coordinates):
+    distance_meters, azimuth, back_azimuth = gps2dist_azimuth(
+        station_coordinates[0], station_coordinates[1],  # Station latitude and longitude
+        epicenter_coordinates[0], epicenter_coordinates[1]  # Epicenter latitude and longitude
+    )
+    distance_kilometers = distance_meters / 1000.0
+    return distance_kilometers

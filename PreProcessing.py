@@ -7,6 +7,7 @@ from obspy import UTCDateTime, Stream
 from obspy.signal.filter import bandpass
 import seisbench.models as sbm
 import torch
+from utils import *
 
 
 def remove_outliers_threshold(trace, threshold_factor=2):
@@ -110,6 +111,7 @@ def remove_outliers_window_optimized(trace, window_size=10, threshold_factor=1.5
 
 
 def deep_denoiser(stream, model):
+    enable_GPU(model)
     annotations = model.annotate(stream)
     return annotations
 
