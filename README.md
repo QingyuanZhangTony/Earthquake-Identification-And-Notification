@@ -49,7 +49,7 @@ Improved overall code logic.  <br />
 Redesigned flowchart for better representation of project design. Seprated code module design from flowchart.<br />
 Added "detected_start" column to DataFrame for storing observed starting time for catalogued earthquakes. <br />
 Added functions to plot predicted times and identified times on the waves for better visualization.  Example: <br />
-<img src="misc/example_plot.png" width="650"><br />
+<img src="misc/example_plot.png" width="550"><br />
 Added a basic function matching detected events with catalogued earthquakes by comparing times.  <br />
 Working on finding best parameters for STA/LTA and preprocessing/denosing.<br />
 Planning on building a real-time script to report latest events by continously monitoring a catalogue. This will generate emails for individual events captured on local stations<br />
@@ -78,11 +78,14 @@ Improved existing codes and fixed some issues. <br />
 Added GPU support. If CUDA is available, models will run on GPU for acceleration.  <br /> 
 Catalogues requested are saved to QuakeXML file. It will check if it already exists before requesting.<br /> 
 Added probability plotting of picked phases when visualizing the matched event. Example:  <br /> 
-<img src="misc/0502-1.png" width="650"><br />
+<img src="misc/0502-1.png" width="550"><br />
 
 ### 2024-05-04<b/> <br />
 DataFrame now contains unique event ID, depth, epicentral distance for catalogued events. <br /> 
-Added plot function for showing catalogued events and station on globe map. <br /> 
+Added plot function for showing catalogued events and station on globe map. Has the option to toggle map filling. <br />
+Examples of map filling on/off: <br />
+<img src="misc/0504-1.png" width="450"><br />
+<img src="misc/0504-2.png" width="450"><br />
 Functions for downloading mseed files and catalogues now have the option to download again and overwrite already existing files. <br /> 
 Optimized a lot of existing codes. Deleted unused and old functions. <br /> 
 
