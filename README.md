@@ -1,7 +1,7 @@
 # Automated Earthquake Identification And Notification Systems
 This repository is for my dissertation project of Durham MDS. <br />
 
-## Usage
+## Demo Usage
 Run interactiveMain.ipynb for examples of latest progress.<br />
 
 ## Flowchart of Project/ Code Design
