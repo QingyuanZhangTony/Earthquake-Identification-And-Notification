@@ -91,6 +91,7 @@ Other changes: <br />
 1. Now all processed streams, phase picking predictions/ annotations and results will be saved to files.<br />
 2. The files saved will used for generating contents for the email notifications or build a database in the future.  <br />
 3. Added contentGeneration.ipynb for testing building contents for report/email.<br />
+See this [PDF](generated/ExampleEmailContent.pdf) for example for email content built using HTML.<br />
 
 Next steps: Improve exceptions catching and file management.<br />
 
