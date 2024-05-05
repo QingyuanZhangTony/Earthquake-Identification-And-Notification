@@ -85,7 +85,14 @@ Other changes: <br />
 <img src="misc/0504-1.png" width="450"><br />
 <img src="misc/0504-2.png" width="450"><br />
 3. Functions for downloading mseed files and catalogues now have the option to download again and overwrite already existing files. <br /> 
-4. Optimized a lot of existing codes. Deleted unused and old functions. <br /> 
+4. Optimized a lot of existing codes. Deleted unused and old functions. <br />
+
+### 2024-05-05<b/> <br />
+1. Now all processed streams, phase picking predictions/ annotations and results will be saved to files.<br />
+2. The files saved will used for generating contents for the email notifications or build a database in the future.  <br />
+3. Added contentGeneration.ipynb for testing building contents for report/email.<br />
+
+Next steps: Improve exceptions catching and file management.<br />
 
 
 
