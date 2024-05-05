@@ -12,30 +12,28 @@ from obspy.taup import TauPyModel
 from DataDownload import *
 
 
-def request_catalogue(catalogue_providers, coordinates, date, radmin, radmax, minmag, maxmag, overwrite=False):
-    # Convert the date from string to UTCDateTime
-    try:
-        base_date = UTCDateTime(date)
-    except Exception as e:
-        print(f"Error parsing date '{date}': {e}")
-        return None
-
+def request_catalogue(catalogue_providers, station_information, date, radmin, radmax, minmag, maxmag, path,
+                      overwrite=False):
+    base_date = UTCDateTime(date)
     starttime = base_date - 30 * 60  # 23:30 the day before
     endtime = base_date + (24 * 3600) + (30 * 60)  # 00:30 the day after
 
-    # Directory path
-    cur_dir = os.getcwd()
-    data_dir = os.path.join(cur_dir, "data", "catalogue")
-    os.makedirs(data_dir, exist_ok=True)
+    # Determine the directory path
+    network, station, _ = station_information
+    datestr = base_date.strftime("%Y-%m-%d")
+    if not path:
+        cur_dir = os.getcwd()
+        path = os.path.join(cur_dir, "data", f"{network}.{station}", datestr)
+
+    os.makedirs(path, exist_ok=True)
 
     # File naming using latitude and longitude
-    latitude, longitude = coordinates
+    latitude, longitude = get_coordinates(station_information)
     lat_lon_str = f"{latitude:.2f}_{longitude:.2f}".replace(".", "p")
-    datestr = base_date.strftime("%Y-%m-%d")
 
     for provider in catalogue_providers:
-        filename = f"{datestr}_{provider}.xml"
-        filepath = os.path.join(data_dir, filename)
+        filename = f"{datestr}_{provider}.catalogue.xml"
+        filepath = os.path.join(path, filename)
 
         # Check file existence and overwrite parameter
         if os.path.isfile(filepath) and not overwrite:
@@ -78,7 +76,7 @@ def request_catalogue(catalogue_providers, coordinates, date, radmin, radmax, mi
 def load_earthquake_catalog(filepath):
     # Check if the specified file exists
     if os.path.isfile(filepath):
-        print(f"Loading catalogue from path.")
+        print("Reading catalogue from path.")
         print('-' * 40)
         try:
             # Read the QuakeML file
@@ -101,7 +99,8 @@ def print_catalogued(catalogued_earthquakes):
         print()
 
 
-def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fill_map):
+def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fill_map, path=None, show=False,
+                   save=False):
     network, station, data_provider = station_information  # Extract station details
     latitude, longitude = get_coordinates(station_information)  # Assuming function exists to get coordinates
 
@@ -139,7 +138,7 @@ def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fi
     # Prepare colorbar and set its position and size
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=30, fraction=0.066, shrink=0.65)
+    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=50, fraction=0.01, shrink=0.7)
     cbar.set_label('Magnitude')
 
     title_date = catalogue_date.strftime('%Y-%m-%d')
@@ -149,7 +148,17 @@ def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fi
     # Adding legend to show station marker
     ax.legend(loc='upper right')
 
-    plt.show()
+    if save and path:
+        file_path = os.path.join(path, f'catalogued_plot_{title_date}.png')
+        plt.tight_layout()
+        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
+        print(f"Saved plot to {file_path}")
+        plt.close()
+
+    if show:
+        plt.tight_layout()
+
+        plt.show()
 
 
 def predict_arrival(event, station_coordinates):
