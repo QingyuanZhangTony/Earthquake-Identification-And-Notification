@@ -2,7 +2,7 @@
 This repository is for my dissertation project of Durham MDS. <br />
 
 ## Demo Usage
-Run interactiveMain.ipynb for examples of latest progress.<br />
+Run main.ipynb for examples of latest progress.<br />
 
 ## Flowchart of Project/ Code Design
 This reflect my current design and progress and will be updated constantly.
@@ -94,6 +94,12 @@ Other changes: <br />
 See this [PDF](generated/ExampleEmailContent.pdf) for example for email content built using HTML.<br />
 
 Next steps: Improve exceptions catching and file management.<br />
+
+### 2024-05-06<b/> <br />
+1. Kept working on codes for building HTML. See this [PDF](generated/ExampleEmailContent.pdf) for latest example.<br />
+2. Worked on tweaking parameters for requesting catalogues to maximize chance of matching events.<br />
+3. Fixed a number of small bugs. <br />
+4. Updated flowchart to reflex latest code design. <br />
 
 
 
