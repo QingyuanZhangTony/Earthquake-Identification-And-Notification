@@ -2,7 +2,7 @@
 This repository is for my dissertation project of Durham MDS. <br />
 
 ## Demo Usage
-Run main.ipynb for examples of latest progress.<br />
+See main.ipynb and for report_generation.ipynb for latest progress.<br />
 
 ## Flowchart of Project/ Code Design
 This reflect my current design and progress and will be updated constantly.
