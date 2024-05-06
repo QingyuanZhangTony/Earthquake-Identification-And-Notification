@@ -96,7 +96,8 @@ See this [PDF](generated/ExampleEmailContent.pdf) for example for email content 
 Next steps: Improve exceptions catching and file management.<br />
 
 ### 2024-05-06<b/> <br />
-1. Kept working on codes for building HTML. See this [PDF](generated/ExampleEmailContent.pdf) for latest example.<br />
+1. Kept working on codes for building HTML. <br />
+2. Added report_generation.ipynb to demonstrate content generation using files produced from main.ipynb. See Noteebook and this [PDF](generated/ExampleEmailContent.pdf) for latest example.<br />
 2. Worked on tweaking parameters for requesting catalogues to maximize chance of matching events.<br />
 3. Fixed a number of small bugs. <br />
 4. Updated flowchart to reflex latest code design. <br />
