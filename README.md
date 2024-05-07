@@ -102,6 +102,10 @@ Next steps: Improve exceptions catching and file management.<br />
 3. Fixed a number of small bugs. <br />
 4. Updated flowchart to reflex latest code design. <br />
 
+### 2024-05-07<b/> <br />
+Added feature to set different threshold and tolerance values for P and S when filtering picking confidence and matching events. <br />
+Added spectrogram plotting for the matched events. Now the report shows waveform(with predicted and picked time marked) + prediction confidence(probability) + spectrogram. Example:  <br />  
+<img src="misc/0507.png" width="550"><br />
 
 
 
