@@ -106,6 +106,12 @@ Next steps: Improve exceptions catching and file management.<br />
 Just found out that P waves are usually much more easier to be detected than S waves with higher accuracy and lower prediction time error. Added feature to set different threshold and tolerance values for P and S when filtering picking confidence and matching events. <br />
 Added spectrogram plotting for the matched events. Now the report shows waveform(with predicted and picked time marked) + prediction confidence(probability) + spectrogram. Example:  <br />  
 <img src="misc/0507.png" width="550"><br />
+Added function for email message preparation, which prepare emails content by embedding images as MIMEImage objects to message. <br />
+Added function for sending the emails to designated recipient using SMTP. <br />
+Email sending function is working but Outlook and Gmail do not render it correctly for security reasons. Tested in other email clients and works as expected.<br />
+
+
+
 
 
 
