@@ -1,14 +1,27 @@
 import os
+import re
+import smtplib
+from datetime import datetime
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-import matplotlib.pyplot as plt
+import os
+import time
+
+# Function for downloading data from given station and returns availability
 import numpy as np
+import requests
+from obspy import UTCDateTime, read
+from obspy.clients.fdsn import Client
+from obspy.clients.fdsn.header import FDSNNoDataException
+
 import pandas as pd
-from obspy import UTCDateTime
+from matplotlib import pyplot as plt
 from obspy import read_events
-from obspy.core.stream import read
-from station_data import *
-import cartopy.crs as ccrs
-from event_detection import *
+
+from event_detection import calculate_matching_stats
+
 
 def read_catalogue_file(folder):
     catalogue = None
@@ -37,7 +50,7 @@ def read_catalogue_file(folder):
     if not catalogue:
         print(f"No catalogue files found containing '{keyword}'.")
     else:
-        print(f"Loaded data from {file_path}")
+        print(f"Loaded catalogue from {file_path}")
 
     return catalogue, provider
 
@@ -50,7 +63,7 @@ def read_csv_from_path(path, date, station_information, identifier):
 
     # Load the DataFrame from the specified CSV file
     df = pd.read_csv(file_path)
-    print(f"Loaded data from {file_path}")
+    print(f"Loaded csv from {file_path}")
     return df
 
 
@@ -79,7 +92,7 @@ def get_event_info(row):
         "P_peak_confidence": row.get('P_peak_confidence', None),
         "S_peak_confidence": row.get('S_peak_confidence', None),
         "epi_distance": row.get('epi_distance', None),
-        "depth": row.get('depth', None),
+        "depth": row.get('depth', None) / 1000,
         "event_id": event_id,
         "full_id": full_id,
         "detected_p_time": row.get('P_detected', ""),  # Correct syntax using .get()
@@ -103,7 +116,7 @@ def plot_predictions_wave(stream, predictions, earthquake_info, path=None, show=
     predicted_p_time = ensure_utc(earthquake_info.get('predicted_p_time'))
     predicted_s_time = ensure_utc(earthquake_info.get('predicted_s_time'))
 
-    # Use the earliest non-null prediction time for slicing if available
+    # Calculate the time range for slicing the stream
     start_times = [t for t in [predicted_p_time, detected_p_time] if t is not None]
     end_times = [t for t in [predicted_s_time, detected_s_time] if t is not None]
     starttime = min(start_times) - 60 if start_times else None
@@ -122,41 +135,64 @@ def plot_predictions_wave(stream, predictions, earthquake_info, path=None, show=
     start_time = trace[0].stats.starttime
     end_time = trace[0].stats.endtime
 
-    fig, ax = plt.subplots(2, 1, figsize=(13, 6), sharex=True, gridspec_kw={'hspace': 0.05, 'height_ratios': [1, 1]},
-                           constrained_layout=True)
+    # Create subplots for visualizing the seismic data and predictions
+    fig, axes = plt.subplots(3, 1, figsize=(13, 9), sharex=True,
+                             gridspec_kw={'hspace': 0.04, 'height_ratios': [1, 1, 1]},
+                             constrained_layout=True)
 
     color_dict = {"P": "C0", "S": "C1", "De": "#008000"}
 
+    # First subplot: Normalized Waveform Plot
+    axes[0].plot(trace[0].times(), trace[0].data / np.amax(np.abs(trace[0].data)), 'k', label=trace[0].stats.channel)
+    axes[0].set_ylabel('Normalized Amplitude')
+
+    # Second subplot: Prediction Confidence Plot
     for pred_trace in predictions:
         model_name, pred_class = pred_trace.stats.channel.split("_")
         if pred_class == "N":
             continue  # Skip noise traces
         c = color_dict.get(pred_class, "black")  # Use black as default color if not found
         offset = pred_trace.stats.starttime - start_time
-        ax[1].plot(offset + pred_trace.times(), pred_trace.data, label=pred_class, c=c)
+        label = "Detection" if pred_class == "De" else pred_class  # Change "De" to "Detection"
+        axes[1].plot(offset + pred_trace.times(), pred_trace.data, label=label, c=c)
+    axes[1].set_ylabel("Prediction Confidence")
+    axes[1].legend(loc='upper right')
+    axes[1].set_ylim(0, 1.1)
 
-    ax[1].set_ylabel("Prediction Confidence")
-    ax[1].legend(loc=2)
-    ax[1].set_ylim(0, 1.1)
-    ax[0].plot(trace[0].times(), trace[0].data / np.amax(np.abs(trace[0].data)), 'k', label=trace[0].stats.channel)
+    # Third subplot: Spectrogram
+    fs = trace[0].stats.sampling_rate
+    axes[2].specgram(trace[0].data, NFFT=1024, Fs=fs, noverlap=512, cmap='viridis')
+    axes[2].set_ylabel('Frequency [Hz]')
+    axes[2].set_xlabel('Time [s]')
 
-    # Plotting detected and predicted arrival times
+    # Add markers for detected and predicted seismic phases
     times = [detected_p_time, detected_s_time, predicted_p_time, predicted_s_time]
     colors = ['C0', 'C1', 'C0', 'C1']
     styles = ['-', '-', '--', '--']
     labels = ['Detected P Arrival', 'Detected S Arrival', 'Predicted P Arrival', 'Predicted S Arrival']
-    for t, color, style, label in zip(times, colors, styles, labels):
-        if t:
-            t_utc = UTCDateTime(t)
-            ax[0].axvline(x=t_utc - start_time, color=color, linestyle=style, label=label, linewidth=0.8)
+    for ax in axes[:-1]:  # Loop through the first two axes to add lines
+        for t, color, style, label in zip(times, colors, styles, labels):
+            if t:
+                t_utc = UTCDateTime(t)
+                ax.axvline(x=t_utc - start_time, color=color, linestyle=style, label=label, linewidth=0.8)
 
-    ax[0].set_title(
-        f'Earthquake on {earthquake_info["time"]} - Lat: {earthquake_info["lat"]}, Long: {earthquake_info["long"]} - Magnitude: {earthquake_info["mag"]}',
+    # 修改标题中的时间格式
+    event_time = UTCDateTime(earthquake_info["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+    axes[0].set_title(
+        f'Detection of Event {event_time} - Lat: {earthquake_info["lat"]}, Long: {earthquake_info["long"]} - Magnitude: {earthquake_info["mag"]} {earthquake_info["mag_type"]}',
         fontsize=18)
-    ax[0].set_ylabel('Normalized Amplitude')
-    ax[1].set_xlabel('Time [s]')
-    ax[0].set_xlim(0, end_time - start_time)
-    ax[0].legend(loc='upper right')
+    axes[0].set_xlim(0, end_time - start_time)
+
+    # 修改坐标轴的标签
+    x_ticks = np.arange(0, end_time - start_time + 1, 60)
+    x_labels = [(start_time + t).strftime('%H:%M:%S.%f')[:-4] for t in x_ticks]  # 秒精确到小数点后两位
+    for ax in axes:
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels(x_labels, rotation=0)  # 让坐标水平显示
+
+    # Add all labels to the legend
+    handles, labels = axes[0].get_legend_handles_labels()
+    axes[0].legend(handles, labels, loc='upper right')
 
     if show:
         plt.show()
@@ -192,9 +228,9 @@ def html_header(date_str):
 
 
 def html_basic_info(network, station_code, catalogue_provider):
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
     html_content = f"""
-        <p><strong>Station:</strong> {network}.{station_code}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Catalogue Provider:</strong> {catalogue_provider}</p>
-
+        <p><strong>Station:</strong> {network}.{station_code}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Catalogue Provider:</strong> {catalogue_provider}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Issued At:</strong> {current_time}</p>
     """
     return html_content
 
@@ -234,7 +270,8 @@ def html_catalogue_list(df):
 
 
 def html_detected(df):
-    number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_both_phases_identified = calculate_matching_stats(df)
+    number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_p_identified, number_s_identified = calculate_matching_stats(
+        df)
     total_detected = number_matched + number_not_in_catalogue
 
     html_content = f"""
@@ -247,14 +284,19 @@ def html_detected(df):
 
 
 def html_matched_stats(df):
-    number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_both_phases_identified = calculate_matching_stats(df)
+    number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_p_identified, number_s_identified = calculate_matching_stats(
+        df)
 
-    detected_rate = (number_matched / number_catalogued * 100) if number_catalogued else 0
+    event_detected_rate = (number_matched / number_catalogued * 100) if number_catalogued else 0
+    p_detected_rate = (number_p_identified / number_catalogued * 100) if number_catalogued else 0
+    s_detected_rate = (number_s_identified / number_catalogued * 100) if number_catalogued else 0
 
     html_content = f"""
     <div>
         <p><strong>Catalogued Events Detected:</strong> {number_matched} out of {number_catalogued}</p>
-        <p><strong>Detected Rate:</strong> {detected_rate:.2f}%</p>
+        <p><strong>Event Detected Rate:</strong> {event_detected_rate:.2f}%</p>
+        <p><strong>P Wave Detected Rate:</strong> {p_detected_rate:.2f}%</p>
+        <p><strong>S Wave Detected Rate:</strong> {s_detected_rate:.2f}%</p>
         <p><strong>Detected But Not Catalogued:</strong> {number_not_in_catalogue}</p>
     </div>
 
@@ -286,7 +328,7 @@ def html_matched_info(events, catalogue_provider):
                 </tr>
                 <tr>
                     <td colspan="2">Magnitude</td><td colspan="2">{event_info['mag']} {event_info['mag_type']}</td>
-                    <td colspan="2">Depth</td><td colspan="2">{event_info['depth']} m</td>
+                    <td colspan="2">Depth</td><td colspan="2">{event_info['depth']:.2f} km</td>
                 </tr>
                 <tr>
                     <td colspan="2">Predicted P time</td><td colspan="2">{event_info.get('predicted_p_time', 'N/A')}</td>
@@ -336,4 +378,72 @@ def create_earthquake_report_html(df, file_path, date, station, catalogue_provid
         file.write(html_content)
     print(f"HTML report generated: {output_html_file}")
 
-    return output_html_file
+    return html_content
+
+
+# Prepares an HTML email message with embedded images
+def prepare_email(html_content, image_path, date):
+    msg = MIMEMultipart('related')
+    msg['Subject'] = f'Event Report For {date.strftime('%Y-%m-%d')}'
+
+    # Use regular expression to find all image references in the HTML
+    images = re.findall(r'src="([^"]+)"', html_content)
+    updated_html = html_content
+    all_images_loaded = True  # Flag to check if all images are loaded
+
+    # Create a MIMEImage object for each image and update HTML references
+    for i, img_path in enumerate(images, 1):
+        full_path = os.path.join(image_path, img_path)
+
+        if os.path.exists(full_path):
+            # Read the image file
+            with open(full_path, 'rb') as img_file:
+                img = MIMEImage(img_file.read())
+                cid = f'image{i}'
+                img.add_header('Content-ID', f'<{cid}>')
+                msg.attach(img)
+            # Update the src attribute in HTML to the Content-ID reference
+            updated_html = updated_html.replace(f'src="{img_path}"', f'src="cid:{cid}"')
+        else:
+            all_images_loaded = False  # Set the flag to False if any image fails to load
+
+    if all_images_loaded:
+        print("Images have been embedded. Message ready.")
+
+    # Attach the updated HTML as the email body
+    msg.attach(MIMEText(updated_html, 'html'))
+
+    return msg
+
+
+# Send the emails to the designated email
+def send_email(email_message, recipient):
+    print("Preparing to send an email...")
+
+    # SMTP server settings
+    smtp_server = "smtp.126.com"
+    smtp_port = 25
+    smtp_obj = smtplib.SMTP(smtp_server, smtp_port)
+    print("SMTP server connected.")
+
+    # User login information
+    email_address = 'seismicreport@126.com'  # Replace with your 126 email address
+    password = 'LKBYSOWAVLDGUOBN'  # Replace with your password or app-specific password
+
+    # Log in to the SMTP server
+    smtp_obj.login(email_address, password)
+    print("Logged in to the SMTP server.")
+
+    # Set the sender and recipient information in the email message
+    email_message['From'] = email_address
+    email_message['To'] = recipient
+    print("Sender and recipient set.")
+
+    # Send the email
+    smtp_obj.sendmail(email_address, recipient, email_message.as_string())
+    print("Email sent.")
+
+    # Disconnect from the SMTP server
+    smtp_obj.quit()
+    print("Disconnected from the SMTP server.")
+

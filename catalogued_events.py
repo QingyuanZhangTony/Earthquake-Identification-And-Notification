@@ -107,10 +107,15 @@ def print_catalogued(catalogued):
 def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fill_map=False, path=None, show=False,
                    save=False):
     network, station, data_provider = station_information  # Extract station details
-    latitude, longitude = get_coordinates(station_information)  # Assuming function exists to get coordinates
+
+    try:
+        latitude, longitude = get_coordinates(station_information)  # Assuming function exists to get coordinates
+        valid_coordinates = True
+    except Exception:
+        valid_coordinates = False  # Failed to get coordinates
 
     fig, ax = plt.subplots(figsize=(10, 7), subplot_kw={
-        'projection': ccrs.PlateCarree(central_longitude=longitude)
+        'projection': ccrs.PlateCarree(central_longitude=longitude if valid_coordinates else 0)
     })
     ax.set_global()
     ax.coastlines()
@@ -124,9 +129,10 @@ def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fi
         text_color = 'black'  # Text color without fill
         station_color = '#7F27FF'  # Station color without fill
 
-    # Plotting the station location with a special marker
-    ax.plot(longitude, latitude, marker='^', color=station_color, markersize=12, linestyle='None',
-            transform=ccrs.Geodetic(), label=f'Station {station}')
+    # Plotting the station location with a special marker, if coordinates are valid
+    if valid_coordinates:
+        ax.plot(longitude, latitude, marker='^', color=station_color, markersize=12, linestyle='None',
+                transform=ccrs.Geodetic(), label=f'Station {station}')
 
     # Setup colormap and normalization
     cmap = plt.get_cmap('viridis')
@@ -157,12 +163,10 @@ def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fi
         file_path = os.path.join(path, f'catalogued_plot_{title_date}.png')
         plt.tight_layout()
         plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
-        print(f"Saved plot to {file_path}")
         plt.close()
 
     if show:
         plt.tight_layout()
-
         plt.show()
 
 

@@ -68,19 +68,22 @@ def predict_and_annotate(stream, model):
 
 
 # Filter for getting rid of false positives with a probability/ confidence threshold
-def filter_confidence(result_df, confidence_threshold):
-    condition = (result_df['catalogued'] == False) & \
-                (result_df['detected'] == True) & \
-                (result_df['peak_confidence'] < confidence_threshold)
+def filter_confidence(df, p_threshold, s_threshold):
+    # Define conditions for filtering
+    p_condition = (df['phase'] == "P") & (df['peak_confidence'] < p_threshold)
+    s_condition = (df['phase'] == "S") & (df['peak_confidence'] < s_threshold)
 
-    # Delete rows that meet the criteria
-    result_df = result_df[~condition]
+    # Combine conditions using logical OR
+    combined_condition = p_condition | s_condition
 
-    return result_df
+    # Delete rows that meet either condition
+    df = df[~combined_condition]
+
+    return df
 
 
 # Associate the detected signals with catalogued earthquakes using a time tolerance
-def match_and_merge(df_catalogued, df_detected, time_tolerance):
+def match_and_merge(df_catalogued, df_detected, tolerance_p, tolerance_s):
     remaining_det = df_detected.copy()
 
     for index, row in df_catalogued.iterrows():
@@ -99,13 +102,13 @@ def match_and_merge(df_catalogued, df_detected, time_tolerance):
             detected_phase = d_row['phase']
             detected_confidence = d_row['peak_confidence']
 
-            if detected_phase == 'P' and p_time and abs(detected_time - p_time) <= time_tolerance:
+            if detected_phase == 'P' and p_time and abs(detected_time - p_time) <= tolerance_p:
                 if detected_confidence > highest_p_confidence:
                     highest_p_confidence = detected_confidence
                     p_detected = detected_time
                 p_matched_indices.append(d_index)
 
-            if detected_phase == 'S' and s_time and abs(detected_time - s_time) <= time_tolerance:
+            if detected_phase == 'S' and s_time and abs(detected_time - s_time) <= tolerance_s:
                 if detected_confidence > highest_s_confidence:
                     highest_s_confidence = detected_confidence
                     s_detected = detected_time
@@ -132,7 +135,8 @@ def match_and_merge(df_catalogued, df_detected, time_tolerance):
             'detected': True,
             'P_detected': d_row['peak_time'].isoformat() if d_row['phase'] == 'P' else None,
             'S_detected': d_row['peak_time'].isoformat() if d_row['phase'] == 'S' else None,
-            'peak_confidence': d_row['peak_confidence']
+            'P_peak_confidence': d_row['peak_confidence'] if d_row['phase'] == 'P' else None,
+            'S_peak_confidence': d_row['peak_confidence'] if d_row['phase'] == 'S' else None
         }
         new_rows.append(new_row)
 
@@ -140,6 +144,10 @@ def match_and_merge(df_catalogued, df_detected, time_tolerance):
         df_merged = pd.concat([df_catalogued, pd.DataFrame(new_rows)], ignore_index=True)
     else:
         df_merged = df_catalogued.copy()
+
+    # Remove the peak_confidence column
+    if 'peak_confidence' in df_merged.columns:
+        df_merged.drop(columns='peak_confidence', inplace=True)
 
     return df_merged
 
@@ -156,13 +164,15 @@ def calculate_matching_stats(df):
     # Count detected events that are not in the catalogue
     number_not_in_catalogue = df[df['catalogued'] == False].shape[0]
 
-    # Count events where both P_detected and S_detected are not null for catalogued and detected events
-    number_both_phases_identified = df[(df['detected'] == True) &
-                                       (df['catalogued'] == True) &
-                                       (df['P_detected'].notnull()) &
-                                       (df['S_detected'].notnull())].shape[0]
+    number_p_identified = df[(df['detected'] == True) &
+                             (df['catalogued'] == True) &
+                             (df['P_detected'].notnull())].shape[0]
 
-    return number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_both_phases_identified
+    number_s_identified = df[(df['detected'] == True) &
+                             (df['catalogued'] == True) &
+                             (df['S_detected'].notnull())].shape[0]
+
+    return number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_p_identified, number_s_identified
 
 
 def print_event_info(earthquake_info):
