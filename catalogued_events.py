@@ -1,5 +1,3 @@
-import cartopy.crs as ccrs
-import matplotlib.pyplot as plt
 import obspy
 import obspy.geodetics.base
 import obspy.geodetics.base
@@ -29,10 +27,6 @@ def request_catalogue(catalogue_providers, station_information, station_location
 
     os.makedirs(path, exist_ok=True)
 
-    # File naming using latitude and longitude
-    latitude, longitude = station_location
-    lat_lon_str = f"{latitude:.2f}_{longitude:.2f}".replace(".", "p")
-
     for provider in catalogue_providers:
         filename = f"{datestr}_{provider}.catalogue.xml"
         filepath = os.path.join(path, filename)
@@ -40,14 +34,14 @@ def request_catalogue(catalogue_providers, station_information, station_location
         # Check file existence and overwrite parameter
         if os.path.isfile(filepath) and not overwrite:
             print(f"Catalogue for {datestr} already exists.")
-            return filepath
+            continue  # Continue trying next provider instead of returning
 
         # Attempt to fetch data from each provider
         try:
             client = Client(provider)
             catalog = client.get_events(
-                latitude=latitude,
-                longitude=longitude,
+                latitude=station_location[0],
+                longitude=station_location[1],
                 minradius=radmin,
                 maxradius=radmax,
                 starttime=starttime,
@@ -60,7 +54,7 @@ def request_catalogue(catalogue_providers, station_information, station_location
                 # Save the catalog as a QuakeML file
                 catalog.write(filepath, format="QUAKEML")
                 print(f"Catalog saved to {filepath}")
-                return filepath
+                return filepath, provider  # Return both filepath and provider
             else:
                 print(f"No earthquakes found using the specified parameters from {provider}.")
 
@@ -72,7 +66,7 @@ def request_catalogue(catalogue_providers, station_information, station_location
             print(f"Unexpected error occurred when connecting to {provider}: {e}")
 
     print("Failed to retrieve earthquake data from all provided catalog sources.")
-    return None
+    return None, None  # If no data is found or saved, return None for both
 
 
 # Load and read downloaded catalogue from file path
@@ -101,73 +95,6 @@ def print_catalogued(catalogued):
     else:
         print('No earthquake data was returned or an error occurred.')
         print()
-
-
-# Produce a world map with all catalogued events and station marked for displaying or saving to file.
-def plot_catalogue(earthquake_catalogue, station_information, catalogue_date, fill_map=False, path=None, show=False,
-                   save=False):
-    network, station, data_provider = station_information  # Extract station details
-
-    try:
-        latitude, longitude = get_coordinates(station_information)  # Assuming function exists to get coordinates
-        valid_coordinates = True
-    except Exception:
-        valid_coordinates = False  # Failed to get coordinates
-
-    fig, ax = plt.subplots(figsize=(10, 7), subplot_kw={
-        'projection': ccrs.PlateCarree(central_longitude=longitude if valid_coordinates else 0)
-    })
-    ax.set_global()
-    ax.coastlines()
-
-    # Optional map filling
-    if fill_map:
-        ax.stock_img()  # Adding a simple stock image
-        text_color = 'white'  # Text color when map is filled
-        station_color = '#7F27FF'  # Station color when map is filled
-    else:
-        text_color = 'black'  # Text color without fill
-        station_color = '#7F27FF'  # Station color without fill
-
-    # Plotting the station location with a special marker, if coordinates are valid
-    if valid_coordinates:
-        ax.plot(longitude, latitude, marker='^', color=station_color, markersize=12, linestyle='None',
-                transform=ccrs.Geodetic(), label=f'Station {station}')
-
-    # Setup colormap and normalization
-    cmap = plt.get_cmap('viridis')
-    norm = plt.Normalize(1, 10)  # Fixed range from 1 to 10 for magnitude
-
-    for event in earthquake_catalogue:
-        if event.origins and event.magnitudes and event.origins[0] and event.origins[0].time:
-            origin = event.origins[0]
-            magnitude = event.magnitudes[0].mag
-            color = cmap(norm(magnitude))  # Get color from magnitude
-            ax.plot(origin.longitude, origin.latitude, marker='o', color=color, markersize=10,
-                    transform=ccrs.Geodetic())
-
-    # Prepare colorbar and set its position and size
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=50, fraction=0.01, shrink=0.7)
-    cbar.set_label('Magnitude')
-
-    title_date = catalogue_date.strftime('%Y-%m-%d')
-    title = f"Catalogued Events for {network}.{station} on {title_date}"
-    plt.title(title)
-
-    # Adding legend to show station marker
-    ax.legend(loc='upper right')
-
-    if save and path:
-        file_path = os.path.join(path, f'catalogued_plot_{title_date}.png')
-        plt.tight_layout()
-        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
-        plt.close()
-
-    if show:
-        plt.tight_layout()
-        plt.show()
 
 
 # Predict P and S wave arrival times using TauPy
@@ -213,7 +140,7 @@ def calculate_distance(station_coordinates, epicenter_coordinates):
 
 
 # Create a DataFrame of the catalogued events adding predicted times and various info from the cataloguee
-def process_catalogue(catalog, station_coordinates):
+def process_catalogue(catalog, station_coordinates, catalogue_provider):
     earthquake_info_list = []
 
     # Loop through each earthquake in the catalog
@@ -232,6 +159,7 @@ def process_catalogue(catalog, station_coordinates):
 
         # Collect earthquake data in a dictionary
         earthquake_data = {
+            "provider": catalogue_provider,
             "event_id": event_id,
             "time": event_time.isoformat(),
             "lat": event_latitude,

@@ -3,7 +3,8 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from obspy.core import UTCDateTime
 from obspy.signal.trigger import classic_sta_lta, trigger_onset
-
+import pandas as pd
+from datetime import datetime
 from utils import *
 
 
@@ -150,6 +151,37 @@ def match_and_merge(df_catalogued, df_detected, tolerance_p, tolerance_s):
         df_merged.drop(columns='peak_confidence', inplace=True)
 
     return df_merged
+
+
+def add_time_error_columns(df):
+    df['P_error'] = 'None'
+    df['S_error'] = 'None'
+
+    time_format = '%Y-%m-%dT%H:%M:%S.%f'
+
+    # Filter the DataFrame for rows where both catalogued and detected are True
+    filtered_df = df[(df['catalogued'] == True) & (df['detected'] == True)]
+
+    # Function to calculate time error
+    def calculate_time_error(predicted, detected):
+        if predicted is None or detected is None or predicted == 'N/A' or detected == 'N/A':
+            return 'N/A'
+        try:
+            predicted_dt = datetime.strptime(predicted, time_format)
+            detected_dt = datetime.strptime(detected, time_format)
+            delta = detected_dt - predicted_dt
+            seconds = delta.total_seconds()
+            sign = '+' if seconds > 0 else ''
+            return f"{sign}{seconds:.2f}s"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    # Apply the time error calculation for each row in the filtered DataFrame
+    for index, row in filtered_df.iterrows():
+        df.at[index, 'P_error'] = calculate_time_error(row['P_predict'], row['P_detected'])
+        df.at[index, 'S_error'] = calculate_time_error(row['S_predict'], row['S_detected'])
+
+    return df
 
 
 def calculate_matching_stats(df):
