@@ -110,6 +110,13 @@ Added function for email message preparation, which prepare emails content by em
 Added function for sending the emails to designated recipient using SMTP. <br />
 Email sending function is working but Outlook and Gmail do not render it correctly for security reasons. Tested in other email clients and works as expected.<br />
 
+### 2024-05-08<b/> <br />
+1. Utilized a new GitHub repo dedicated for image hosting to HTML with embedded images not rendering correctly.<br />
+2. Improved catalogue map plot: Now detected and undetected events are shown in different shapes. Legend also shows numbers for each.<br />
+3. Introducing a "simplified" mode when generating report. Hiding a few technical details. <br />
+4. Streamlined codes for reading previously produced files and generating reports. <br />
+5. Added columns for calculated time errors between predicted and detected values in DataFrame after match-n-merge. <br />
+
 
 
 
