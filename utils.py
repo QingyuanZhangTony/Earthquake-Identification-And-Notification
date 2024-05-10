@@ -53,8 +53,3 @@ def test_model_performance(stream, model):
 
     return times
 
-
-def plot_spectrogram(trace):
-    fig = plt.figure(figsize=(9, 3))
-    trace.spectrogram(log=True, title='Spectrogram')
-    plt.show()

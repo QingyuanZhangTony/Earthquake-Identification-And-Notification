@@ -1,3 +1,4 @@
+# Produce a world map with all catalogued events and station
 import os
 from datetime import datetime
 
@@ -5,6 +6,8 @@ import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from IPython.display import Image, display
+from PIL import Image as PILImage
 from matplotlib.legend_handler import HandlerLine2D
 from obspy import UTCDateTime, read
 from obspy import read_events
@@ -66,6 +69,12 @@ def read_stream_from_path(path, date, station_information, identifier):
     stream = read(file_path)
     print(f"Loaded stream from {file_path}")
     return stream
+
+
+def extract_matched_events(df):
+    matched_df = df[(df['catalogued'] == True) & (df['detected'] == True)]
+
+    return matched_df
 
 
 def get_event_info(row):
@@ -199,18 +208,13 @@ def plot_predictions_wave(stream, predictions, earthquake_info, path=None, show=
     plt.close()
 
 
-# Produce a world map with all catalogued events and station
-def plot_catalogue(df, station_information, station_coordinates, catalogue_date, fill_map=False, path=None, show=True):
-    network, station, data_provider = station_information
-    try:
-        latitude, longitude = station_coordinates
-        valid_coordinates = True
-    except Exception:
-        valid_coordinates = False  # Failed to get coordinates
+# Creates single PNG plots for earthquake events with markers
+def create_png_plot(df, station_information, station_coordinates, title, fill_map, show_detected, file_path,
+                    detected_count, undetected_count):
+    network, station, _ = station_information
+    latitude, longitude = station_coordinates
 
-    fig, ax = plt.subplots(figsize=(10, 7), subplot_kw={
-        'projection': ccrs.PlateCarree(central_longitude=longitude if valid_coordinates else 0)
-    })
+    fig, ax = plt.subplots(figsize=(10, 7), subplot_kw={'projection': ccrs.PlateCarree(central_longitude=longitude)})
     ax.set_global()
     ax.coastlines()
 
@@ -224,11 +228,24 @@ def plot_catalogue(df, station_information, station_coordinates, catalogue_date,
         station_color = '#F97300'
         marker_color = '#135D66'
 
-    if valid_coordinates:
-        ax.plot(longitude, latitude, marker='^', color=station_color, markersize=16, linestyle='None',
-                transform=ccrs.Geodetic(), label=f'Station {station}')
+    ax.plot(longitude, latitude, marker='^', color=station_color, markersize=16, linestyle='None',
+            transform=ccrs.Geodetic(), label=f'Station {station}')
 
     norm = plt.Normalize(1, 10)
+
+    for index, event in df.iterrows():
+        if event['detected'] == show_detected:
+            color = cmap(norm(event['mag']))
+            marker = 's' if show_detected else 'o'
+            ax.plot(event['long'], event['lat'], marker=marker, color=color, markersize=10, markeredgecolor='white',
+                    transform=ccrs.Geodetic())
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=32.5, fraction=0.015, shrink=0.9)
+    cbar.set_label('Magnitude')
+
+    plt.title(title, fontsize=15)
 
     # Custom markers for the legend
     detected_marker = plt.Line2D([], [], color=marker_color, marker='s', markersize=10, linestyle='None',
@@ -238,51 +255,107 @@ def plot_catalogue(df, station_information, station_coordinates, catalogue_date,
     station_marker = plt.Line2D([], [], color=station_color, marker='^', markersize=10, linestyle='None',
                                 markeredgecolor='white')
 
-    # Process each event in the DataFrame
-    detected_count = 0
-    undetected_count = 0
-    for index, event in df.iterrows():
-        if event['catalogued'] and pd.notna(event['lat']) and pd.notna(event['long']) and pd.notna(event['mag']):
+    plt.legend([detected_marker, undetected_marker, station_marker],
+               [f'Detected Earthquake: {detected_count}', f'Undetected Earthquake: {undetected_count}',
+                f'Station {station}'],
+               loc='lower center', handler_map={plt.Line2D: HandlerLine2D(numpoints=1)}, ncol=3)
+
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
+
+    plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+
+# Manages plotting logic, generate PNG or GIF depending on params
+def plot_catalogue(df, station_information, station_coordinates, catalogue_date, fill_map=False, path=None, show=True,
+                   create_gif=True):
+    network, station, _ = station_information
+    latitude, longitude = station_coordinates
+    title_date = catalogue_date.strftime('%Y-%m-%d')
+
+    detected_count = df[(df['catalogued'] == True) & (df['detected'] == True)].shape[0]
+    undetected_count = df[(df['catalogued'] == True) & (df['detected'] == False)].shape[0]
+    title = f"Catalogue Events on {title_date}"
+
+    if path:
+        detected_png_path = os.path.join(path, f'detected_plot_{title_date}.png')
+        undetected_png_path = os.path.join(path, f'undetected_plot_{title_date}.png')
+        gif_path = os.path.join(path, f'catalogued_plot_{title_date}.gif')
+        png_path = os.path.join(path, f'catalogued_plot_{title_date}.png')
+
+    detected_events = df[(df['catalogued'] == True) & (df['detected'] == True)]
+    undetected_events = df[(df['catalogued'] == True) & (df['detected'] == False)]
+
+    if create_gif and not detected_events.empty:
+        create_png_plot(detected_events, station_information, station_coordinates,
+                        title, fill_map, True, detected_png_path, detected_count, undetected_count)
+        create_png_plot(undetected_events, station_information, station_coordinates,
+                        title, fill_map, False, undetected_png_path, detected_count, undetected_count)
+
+        # Create GIF with PIL to ensure duration and looping
+        images = [PILImage.open(detected_png_path), PILImage.open(undetected_png_path)]
+        images[0].save(gif_path, save_all=True, append_images=[images[1]], duration=1500, loop=0)
+        print(f"GIF created at {gif_path}")
+
+        if show:
+            display(Image(filename=gif_path))
+    else:
+        fig, ax = plt.subplots(figsize=(10, 7),
+                               subplot_kw={'projection': ccrs.PlateCarree(central_longitude=longitude)})
+        ax.set_global()
+        ax.coastlines()
+
+        if fill_map:
+            ax.stock_img()
+            cmap = plt.get_cmap('autumn')
+            station_color = '#7F27FF'
+            marker_color = '#FAA300'
+        else:
+            cmap = plt.get_cmap('viridis')
+            station_color = '#F97300'
+            marker_color = '#135D66'
+
+        ax.plot(longitude, latitude, marker='^', color=station_color, markersize=16, linestyle='None',
+                transform=ccrs.Geodetic(), label=f'Station {station}')
+
+        norm = plt.Normalize(1, 10)
+
+        for index, event in df[df['catalogued'] == True].iterrows():
             color = cmap(norm(event['mag']))
-            marker = 's' if event.get('detected', False) else 'o'  # Square if detected, circle otherwise
-            if event.get('detected', False):
-                detected_count += 1
-            else:
-                undetected_count += 1
+            marker = 's' if event['detected'] else 'o'
             ax.plot(event['long'], event['lat'], marker=marker, color=color, markersize=10, markeredgecolor='white',
                     transform=ccrs.Geodetic())
 
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=32.5, fraction=0.015, shrink=0.9)
-    cbar.set_label('Magnitude')
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.02, aspect=32.5, fraction=0.015, shrink=0.9)
+        cbar.set_label('Magnitude')
 
-    title_date = catalogue_date.strftime('%Y-%m-%d')
-    title = f"Catalogued Event for Station {network}.{station} on {title_date}"
-    plt.title(title, fontsize=15)
+        plt.title(title, fontsize=15)
 
-    # Set up the legend with custom markers
-    if detected_count >= 1:
+        detected_marker = plt.Line2D([], [], color=marker_color, marker='s', markersize=10, linestyle='None',
+                                     markeredgecolor='white')
+        undetected_marker = plt.Line2D([], [], color=marker_color, marker='o', markersize=10, linestyle='None',
+                                       markeredgecolor='white')
+        station_marker = plt.Line2D([], [], color=station_color, marker='^', markersize=10, linestyle='None',
+                                    markeredgecolor='white')
+
         plt.legend([detected_marker, undetected_marker, station_marker],
                    [f'Detected Earthquake: {detected_count}', f'Undetected Earthquake: {undetected_count}',
-                    f'Station {station}'], loc='lower center', handler_map={plt.Line2D: HandlerLine2D(numpoints=1)},
-                   ncol=3)
-    else:
-        plt.legend([undetected_marker, station_marker],
-                   [f'Undetected Earthquake: {undetected_count}', f'Station {station}'], loc='lower center',
-                   handler_map={plt.Line2D: HandlerLine2D(numpoints=1)}, ncol=3)
+                    f'Station {station}'],
+                   loc='lower center', handler_map={plt.Line2D: HandlerLine2D(numpoints=1)}, ncol=3)
 
-    if path:
-        file_path = os.path.join(path, f'catalogued_plot_{title_date}.png')
         plt.tight_layout()
-        plt.savefig(file_path, bbox_inches='tight', pad_inches=0)
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05)
 
-    # Show the figure if show is True
-    if show:
-        plt.tight_layout()
-        plt.show()
+        plt.savefig(png_path, bbox_inches='tight', pad_inches=0)
+        print(f"PNG created at {png_path}")
 
-    plt.close()
+        if show:
+            display(Image(filename=png_path))
+
+        plt.close()
 
 
 def html_header(date_str):
@@ -327,11 +400,17 @@ def html_catalogue_map(catalog_image_filename):
 
 
 def html_catalogue_list(df, simplified):
+    # Filter catalogued events
     catalogued_events = df[df['catalogued'] == True]
+
+    # Check if there are detected events when simplified is True
+    if simplified:
+        detected_events = catalogued_events[catalogued_events['detected'] == True]
+        if detected_events.empty:
+            return '<p><strong>No earthquake from the catalogue was detected.</strong></p>'
 
     table_rows = []
     for index, event in catalogued_events.iterrows():
-
         if simplified:
             event_time = datetime.strptime(event["time"], '%Y-%m-%dT%H:%M:%S.%f').strftime('%Y-%m-%d %H:%M:%S')
             row_style = ''  # No style needed when simplified and only showing detected
@@ -379,7 +458,7 @@ def html_catalogue_list(df, simplified):
     return html_content
 
 
-def html_event_stats(df, detected):
+def html_overall_stats(df, detected):
     # Calculate stats from the dataframe
     number_catalogued, number_matched, number_not_detected, number_not_in_catalogue, number_p_identified, number_s_identified = calculate_matching_stats(
         df)
@@ -416,58 +495,63 @@ def html_event_stats(df, detected):
     return html_content
 
 
-def html_matched_info(events, catalogue_provider):
+def html_event_detail(events, catalogue_provider):
     html_parts = ['<p class="section_title"><strong>Details For Detected Catalogued Events:</strong></p>']
 
-    for _, row in events.iterrows():
-        event_info = get_event_info(row)
-        image_filename = os.path.join(f"annotation_{event_info['event_id']}.png")
+    if events.empty:
+        # Output if no events are detected
+        html_parts.append('<p><strong>No earthquake from the catalogue was detected.</strong></p>')
+    else:
+        # Process and display detected events
+        for _, row in events.iterrows():
+            event_info = get_event_info(row)
+            image_filename = os.path.join(f"annotation_{event_info['event_id']}.png")
 
-        event_html = f"""
-        <div class="event_details">
-            <img src="{image_filename}" alt="Earthquake Event {event_info['event_id']}" class="annotation_plot">
-            <table class="statistics" border="1">
-                <tr>
-                    <td colspan="2">Event ID</td><td colspan="2">{catalogue_provider} {event_info['event_id']}</td>
-                    <td colspan="2">Earthquake Time</td><td colspan="2">{event_info['time']}</td>
-                </tr>
-                <tr>
-                    <td colspan="2">Location</td><td colspan="2">{event_info['lat']}, {event_info['long']}</td>
-                    <td colspan="2">Distance to Station</td><td colspan="2">{event_info['epi_distance']:.2f} km</td>
-                </tr>
-                <tr>
-                    <td colspan="2">Magnitude</td><td colspan="2">{event_info['mag']} {event_info['mag_type']}</td>
-                    <td colspan="2">Depth</td><td colspan="2">{event_info['depth']:.2f} km</td>
-                </tr>
-                <tr>
-                    <td colspan="2">Predicted P time</td><td colspan="2">{event_info.get('predicted_p_time', 'N/A')}</td>
-                    <td colspan="2">Predicted S time</td><td colspan="2">{event_info.get('predicted_s_time', 'N/A')}</td>
-                </tr>
-                <tr>
-                    <td colspan="2">Detected P time</td><td colspan="2">{event_info.get('detected_p_time', 'N/A')}</td>
-                    <td colspan="2">Detected S time</td><td colspan="2">{event_info.get('detected_s_time', 'N/A')}</td>
-                </tr>
-                <tr>
-                    <td colspan="2">P Peak Confidence</td><td colspan="2">{event_info.get('P_peak_confidence', 'N/A')}</td>
-                    <td colspan="2">S Peak Confidence</td><td colspan="2">{event_info.get('S_peak_confidence', 'N/A')}</td>
-                </tr>
-                <tr>
-                    <td colspan="2">P time error</td><td colspan="2">{event_info.get('p_time_error', 'N/A')}</td>
-                    <td colspan="2">S time error</td><td colspan="2">{event_info.get('s_time_error', 'N/A')}</td>
-                </tr>
-            </table>
-        </div>
-        <br>
-        <br>
-"""
+            event_html = f"""
+            <div class="event_details">
+                <img src="{image_filename}" alt="Earthquake Event {event_info['event_id']}" class="annotation_plot">
+                <table class="statistics" border="1">
+                    <tr>
+                        <td colspan="2">Event ID</td><td colspan="2">{catalogue_provider} {event_info['event_id']}</td>
+                        <td colspan="2">Earthquake Time</td><td colspan="2">{event_info['time']}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">Location</td><td colspan="2">{event_info['lat']}, {event_info['long']}</td>
+                        <td colspan="2">Distance to Station</td><td colspan="2">{event_info['epi_distance']:.2f} km</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">Magnitude</td><td colspan="2">{event_info['mag']} {event_info['mag_type']}</td>
+                        <td colspan="2">Depth</td><td colspan="2">{event_info['depth']:.2f} km</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">Predicted P time</td><td colspan="2">{event_info.get('predicted_p_time', 'N/A')}</td>
+                        <td colspan="2">Predicted S time</td><td colspan="2">{event_info.get('predicted_s_time', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">Detected P time</td><td colspan="2">{event_info.get('detected_p_time', 'N/A')}</td>
+                        <td colspan="2">Detected S time</td><td colspan="2">{event_info.get('detected_s_time', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">P Peak Confidence</td><td colspan="2">{event_info.get('P_peak_confidence', 'N/A')}</td>
+                        <td colspan="2">S Peak Confidence</td><td colspan="2">{event_info.get('S_peak_confidence', 'N/A')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">P time error</td><td colspan="2">{event_info.get('p_time_error', 'N/A')}</td>
+                        <td colspan="2">S time error</td><td colspan="2">{event_info.get('s_time_error', 'N/A')}</td>
+                    </tr>
+                </table>
+            </div>
+            <br>
+            <br>
+            """
 
-        html_parts.append(event_html)
+            html_parts.append(event_html)
 
     html_content = '\n'.join(html_parts)
     return html_content
 
 
-def create_earthquake_report_html(df, file_path, date, station, simplified=True):
+def compile_report_html(df, file_path, date, station, simplified=True, create_gif=True):
     matched_events = df[(df['catalogued'] == True) & (df['detected'] == True)]
 
     event_detected = not matched_events.empty
@@ -475,18 +559,23 @@ def create_earthquake_report_html(df, file_path, date, station, simplified=True)
     network, station_code, _ = station
     date_str = date.strftime('%Y-%m-%d')
     output_html_file = os.path.join(file_path, f"{date_str}_report.html")
-    catalog_image_filename = f"catalogued_plot_{date_str}.png"  # Image file name for the catalogue plot
+
+    if create_gif:
+        catalog_image_filename = f"catalogued_plot_{date_str}.gif"
+    else:
+        catalog_image_filename = f"catalogued_plot_{date_str}.png"
 
     # Determine the provider from the catalogued events
-    catalogue_provider = df[df['catalogued'] == True]['provider'].iloc[0] if not df[df['catalogued'] == True].empty else "Unknown"
+    catalogue_provider = df[df['catalogued'] == True]['provider'].iloc[0] if not df[
+        df['catalogued'] == True].empty else "Unknown"
 
     header = html_header(date_str)
     basic_info = html_basic_info(network, station_code, catalogue_provider)
     catalogue_map = html_catalogue_map(catalog_image_filename)  # Call to add the catalogue map
     catalogue_list = html_catalogue_list(df, simplified)
-    event_stats = html_event_stats(df, event_detected)
+    event_stats = html_overall_stats(df, event_detected)
 
-    event_info = html_matched_info(matched_events, catalogue_provider)
+    event_info = html_event_detail(matched_events, catalogue_provider)
 
     # Assemble all parts into the final HTML content
     html_content = f"{header}{basic_info}<hr>{catalogue_map}{catalogue_list}<hr>{event_stats}<hr>{event_info}</body></html>"
@@ -496,4 +585,3 @@ def create_earthquake_report_html(df, file_path, date, station, simplified=True)
     print(f"HTML report generated: {output_html_file}")
 
     return html_content
-
