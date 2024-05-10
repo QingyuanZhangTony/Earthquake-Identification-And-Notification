@@ -117,6 +117,11 @@ Email sending function is working but Outlook and Gmail do not render it correct
 4. Streamlined codes for reading previously produced files and generating reports. <br />
 5. Added columns for calculated time errors between predicted and detected values in DataFrame after match-n-merge. <br />
 
+### 2024-05-10<b/> <br />
+1. Added an option to generate the catalogued map plot as a GIF, which shows detected events and undetcted events on seperate frames to avoid overlapping. <br />
+2. Working on plot of series of waves for same event from different stations. Workingo on finding well placed stations that holds the data we need.  <br />
+
+
 
 
 
