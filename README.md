@@ -6,7 +6,7 @@ See main.ipynb and for report_generation.ipynb for latest progress.<br />
 
 ## Flowchart of Project/ Code Design
 This reflect my current design and progress and will be updated constantly.
-<img src="Project.drawio.png" width="820"><br />
+<img src="Project_plan.png" width="820"><br />
 
 
 ## Progress Log
