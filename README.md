@@ -121,9 +121,33 @@ Email sending function is working but Outlook and Gmail do not render it correct
 1. Added an option to generate the catalogued map plot as a GIF, which shows detected events and undetcted events on seperate frames to avoid overlapping. <br />
 2. Working on plot of series of waves for same event from different stations. Workingo on finding well placed stations that holds the data we need.  <br />
 
+### 2024-06-14<b/> <br />
+**Total reconstruction** of the program to employ a complete object-oriented approach. 
+The program now utilizes Station, Catalog, Earthquake, and Report objects for a clearer and more organized operation.
+This significantly increases the code's extensibility, readability, and maintainability, and makes a better infrastructure for future development.
+1. Station class:
+   Information: Network, Station code, URL, Latitude and longitude, Report date, Data folder path, Report folder path
+   Methods: Fetch coordinates, Download data, Manage data paths and report folders
+2. Catalog Class:
+   Information: Latitude and longitude (from Station), Date, Minimum/ maximum radius and magnitude, events, provider
+   Methods: Request earthquake data from multiple providers, Process catalog data into Earthquake objects, Generate a summary of the catalog
+3. Earthquake Class:
+   Information: Unique ID, Provider, Event ID, Time, Lat and long, Magnitude and type, Depth, Epicentral distance, Predicted and detected P/S wave arrival times, prediction confidence and time errors, Catalogued and detected status, Plot path
+   Methods: Calculate arrival times, Update errors, Generate detailed plots for each event
+4. Report Class:
+   Information: Station object, List of Earthquake objects, Processed and annotated stream, Simplified and P-only modes, Fill map and create GIF modes, Compiled report HTML path
+   Methods: Generate catalog plots, Generate detailed event plots, Compile HTML report, Update HTML with images, Send report via email, Generate and send report
+   
+Other Fix:
+1. Removed redundant codes.
+2. Decouple interdependencies between py files.
 
-
-
+Next Steps:
+1. Better CSS for report html
+2. Add a method for producing a PDF version of report
+3. Make another attempt at achieving the “moveout” effect in arrival time with increaseing distance from the earthquake
+4. Make a basic GUI for
+   
 
 
 
