@@ -6,7 +6,7 @@ See main.ipynb and for report_generation.ipynb for latest progress.<br />
 
 ## Flowchart of Project/ Code Design
 This reflect my current design and progress and will be updated constantly.
-<img src="Project_plan.png" width="820"><br />
+<img src="617_code.png" width="820"><br />
 
 
 ## Progress Log
@@ -105,7 +105,6 @@ Next steps: Improve exceptions catching and file management.<br />
 ### 2024-05-07 <br />
 Just found out that P waves are usually much more easier to be detected than S waves with higher accuracy and lower prediction time error. Added feature to set different threshold and tolerance values for P and S when filtering picking confidence and matching events. <br />
 Added spectrogram plotting for the matched events. Now the report shows waveform(with predicted and picked time marked) + prediction confidence(probability) + spectrogram. Example:  <br />  
-<img src="misc/0507.png" width="550"><br />
 Added function for email message preparation, which prepare emails content by embedding images as MIMEImage objects to message. <br />
 Added function for sending the emails to designated recipient using SMTP. <br />
 Email sending function is working but Outlook and Gmail do not render it correctly for security reasons. Tested in other email clients and works as expected.<br />
@@ -148,6 +147,24 @@ Next Steps:<br />
 3. Make another attempt at achieving the “moveout” effect in arrival time with increaseing distance from the earthquake<br />
 4. Make a basic GUI as front end <br />
    
+
+### 2024-06-16 <br />
+1. Now the program has a basic web-base GUI created using Dash.<br />
+<img src="misc/617_gui.jpeg" width="550"><br />
+<br />
+2.Further reconstruction and optimization using an object-oriented logic.<br />
+The program's logic is now much clearer, with all information being passed through objects and their interactions.<br />
+All operations are executed as methods of these objects, ensuring a more organized and maintainable code structure.<br />
+Completely new sturcture from ground up:<br />
+<img src="misc/617_code.png" width="550"><br />
+<br />
+Next Steps:<br />
+1. Better CSS for report html<br />
+2. Add a method for producing a PDF version of report<br />
+3. Make another attempt at achieving the “moveout” effect in arrival time with increaseing distance from the earthquake.<br />
+4. ~~Make a basic GUI as front end~~ <br />
+5. Implement mode selection in GUI allowing non-expert user to one-click generate report using default optimize settings.<br />
+
 
 
 
