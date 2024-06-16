@@ -1,0 +1,87 @@
+
+/* Common input styles */
+input[type="text"], .date-picker input {
+    font-size: 14px !important;
+    height: 34px !important;
+    padding: 6px 12px !important;
+    border: 1px solid #ccc !important;
+    border-radius: 4px !important;
+    box-sizing: border-box !important;
+}
+
+/* Set DatePickerSingle picker style */
+.date-picker .DateInput_input {
+    font-size: 14px !important;
+    height: 34px !important;
+    padding: 6px 12px !important;
+    border: 1px solid #ccc !important;
+    border-radius: 4px !important;
+    box-sizing: border-box !important;
+}
+
+/* Control page layout */
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    justify-content: flex-start;
+    align-items: flex-start;
+}
+
+/* Control station info input box layout */
+.station-inputs {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+/* Control options input box layout */
+.options-inputs {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+/* Limit width of station and network input boxes */
+.short-input {
+    width: 70px;
+}
+
+/* Limit URL input box width */
+.long-input {
+    width: 250px;
+}
+
+/* Control button and output container styles */
+button, #output-container {
+    margin-top: 20px;
+    display: block;
+    text-align: left;
+}
+
+/* New style to control layout and border of each section */
+.section {
+    border: 1px solid #ccc;
+    padding: 20px;
+    width: calc(100% - 40px);
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+/* New style to control Catalog Settings area */
+.catalog-inputs {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+/* New style to control Event Picking area */
+.event-picking-inputs {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}

@@ -6,6 +6,13 @@ from obspy.clients.fdsn import Client
 from obspy.core import UTCDateTime
 from obspy import read, Stream
 from obspy.clients.fdsn.header import FDSNNoDataException
+from obspy.signal.trigger import classic_sta_lta, trigger_onset
+import pandas as pd
+from Other.utils import *
+from earthquake import Earthquake
+import seisbench.models as sbm
+
+from obspy import read
 
 
 class Station:
@@ -13,11 +20,18 @@ class Station:
         self.network = network
         self.code = code
         self.url = url
+        self.report_date = UTCDateTime(report_date)
+
         self.latitude = None
         self.longitude = None
         self.date_folder = None
-        self.report_date = UTCDateTime(report_date)
         self.report_folder = None
+
+        self.original_stream = None
+        self.processed_stream = None
+        self.annotated_stream = None
+        self.picked_signals = None
+
         # self.instrument_response = None
 
         self.generate_path(report_date)
@@ -52,6 +66,7 @@ class Station:
 
         if os.path.isfile(filepath) and not overwrite:
             print(f"Data for {date_str} already exists.")
+            self.original_stream = read(filepath)  # Read and set the stream object
             return filepath
 
         client = Client(self.url)
@@ -80,7 +95,52 @@ class Station:
         os.makedirs(path, exist_ok=True)
         full_stream.write(filepath)
         print(f"Data for {date_str} successfully downloaded and combined.")
+        self.original_stream = full_stream  # Set the stream object
         return filepath
+
+    def predict_and_annotate(self):
+        # Get pretrained model for phase picking
+        model = sbm.EQTransformer.from_pretrained("original")
+
+        # Enable GPU processing if available
+        if torch.cuda.is_available():
+            torch.backends.cudnn.enabled = False
+            model.cuda()
+            print("CUDA available. Phase-picking using GPU")
+        else:
+            print("CUDA not available. Phase-picking using CPU")
+
+        # Perform classification to extract picks
+        outputs = model.classify(self.processed_stream)
+        predictions = []
+
+        for pick in outputs.picks:
+            pick_dict = pick.__dict__
+            pick_data = {
+                "peak_time": pick_dict["peak_time"],
+                "peak_confidence": pick_dict["peak_value"],
+                "phase": pick_dict["phase"]
+            }
+            predictions.append(pick_data)
+
+        # Perform annotation to visualize the picks within the stream
+        self.annotated_stream = model.annotate(self.processed_stream)
+
+        # Adjust channel names in the annotated stream to include the original channel plus the model suffix
+        for tr in self.annotated_stream:
+            parts = tr.stats.channel.split('_')
+            if len(parts) > 1:
+                tr.stats.channel = '_' + '_'.join(parts[1:])  # Join parts starting from the first underscore
+
+        self.picked_signals = predictions
+
+    def filter_confidence(self, p_threshold, s_threshold):
+        # Filter detections based on threshold conditions
+        self.picked_signals = [
+            detection for detection in self.picked_signals
+            if (detection['phase'] == "P" and detection['peak_confidence'] >= p_threshold) or
+               (detection['phase'] == "S" and detection['peak_confidence'] >= s_threshold)
+        ]
 
     def download_response_file(self):
         url = f"{self.url}/fdsnws/station/1/query?level=response&network={self.network}&station={self.code}"
@@ -111,11 +171,9 @@ class Station:
         except Exception as e:
             print(f"Error fetching station coordinates: {e}")
 
-
     def __str__(self):
         return (f"Station {self.network}.{self.code} at {self.url}\n"
                 f"Location: {self.latitude}, {self.longitude}\n"
                 f"Report Date: {self.report_date.strftime('%Y-%m-%d')}\n"
                 f"Data Folder: {self.date_folder}\n"
                 f"Report Folder: {self.report_folder}\n")
-

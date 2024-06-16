@@ -1,10 +1,11 @@
 import bisect
 from collections import deque
-
+import os
 import numpy as np
 from obspy.signal.filter import bandpass
 import seisbench.models as sbm
 from Other.utils import *
+from obspy.core import AttribDict
 
 
 # Methods for removing outliers
@@ -108,6 +109,34 @@ def remove_outliers_window_optimized(trace, window_size=10, threshold_factor=1.5
     return trace
 
 
+# Apply conventional methods for signal cleaning
+def process_stream(stream, detrend_demean=True, detrend_linear=True, remove_outliers=True, bandpass_filter=True):
+    if detrend_demean:
+        # Remove the mean from the data
+        stream.detrend("demean")
+
+    if detrend_linear:
+        # Remove the linear trend from the data
+        stream.detrend("linear")
+
+    for trace in stream:
+        if remove_outliers:
+            # Remove outliers from the trace
+            trace = remove_outliers_threshold(trace)
+
+        if bandpass_filter:
+            # Apply a bandpass filter to the trace data
+            trace.data = bandpass(trace.data, freqmin=1, freqmax=40, df=trace.stats.sampling_rate, corners=5)
+
+    # Return the processed stream
+    return stream
+
+# Applies taper to stream to reduce edge effects
+def taper_stream(stream, max_percentage=0.05, type="hann"):
+    for trace in stream:
+        trace.taper(max_percentage=max_percentage, type=type)
+    return stream
+
 # Denoise stream with pretrained DeepDenoiser
 def denoise_stream(stream):
     # Get pretrained model for denosing
@@ -117,9 +146,9 @@ def denoise_stream(stream):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = False
         model.cuda()
-        print("CUDA available. Running on GPU")
+        print("CUDA available. Denosing using GPU")
     else:
-        print("CUDA not available. Running on CPU")
+        print("CUDA not available. Denosing using CPU")
 
     # Save original channel names
     original_channels = [tr.stats.channel for tr in stream]
@@ -134,23 +163,6 @@ def denoise_stream(stream):
     return annotations
 
 
-# Apply conventional methods for signal cleaning
-def process_stream(stream):
-    # Remove the mean and linear trend from the data
-    stream.detrend("demean")
-    stream.detrend("linear")
-
-    for trace in stream:
-        # Remove outliers from the trace
-        trace = remove_outliers_threshold(trace)
-
-        # Apply a bandpass filter to the trace data
-        trace.data = bandpass(trace.data, freqmin=1, freqmax=40, df=trace.stats.sampling_rate, corners=5)
-
-    # Return the processed stream
-    return stream
-
-
 # Save the processed and denoised stream to file
 def save_stream(station, stream, identifier):
     channel = "*Z*"
@@ -163,6 +175,28 @@ def save_stream(station, stream, identifier):
 
     # Ensure the directory exists
     os.makedirs(station.date_folder, exist_ok=True)
+
+    # 确认数据的 dtype
+    dtype = stream[0].data.dtype
+    encoding = None
+
+    # 根据数据类型选择合适的编码
+    if dtype == 'int32':
+        encoding = 'STEIM2'
+    elif dtype == 'float32':
+        encoding = 'FLOAT32'
+    elif dtype == 'float64':
+        encoding = 'FLOAT64'
+    elif dtype == 'int16':
+        encoding = 'STEIM1'
+    else:
+        raise ValueError(f"Unsupported data type: {dtype}")
+
+    # 设置每个 trace 的编码
+    for trace in stream:
+        if not hasattr(trace.stats, 'mseed'):
+            trace.stats.mseed = AttribDict()
+        trace.stats.mseed.encoding = encoding
 
     # Write the stream to a MiniSEED file
     stream.write(filepath, format='MSEED')

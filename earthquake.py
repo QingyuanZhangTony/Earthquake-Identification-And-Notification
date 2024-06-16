@@ -221,6 +221,7 @@ class Earthquake:
         self.epi_distance = epi_distance
         self.p_predicted = UTCDateTime(p_predicted) if p_predicted else None
         self.s_predicted = UTCDateTime(s_predicted) if s_predicted else None
+
         self.p_detected = UTCDateTime(p_detected) if p_detected else None
         self.s_detected = UTCDateTime(s_detected) if s_detected else None
         self.p_confidence = p_confidence
