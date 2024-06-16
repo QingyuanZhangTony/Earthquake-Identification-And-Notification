@@ -153,9 +153,9 @@ Next Steps:<br />
 <img src="misc/617_gui.jpeg" width="550"><br />
 <br />
 2.Further reconstruction and optimization using an object-oriented logic.<br />
-The program's logic is now much clearer, with all information being passed through objects and their interactions.<br />
-All operations are executed as methods of these objects, ensuring a more organized and maintainable code structure.<br />
-Completely new sturcture from ground up:<br />
+   The program's logic is now much clearer, with all information being passed through objects and their interactions.<br />
+   All operations are executed as methods of these objects, ensuring a more organized and maintainable code structure.<br />
+   Completely new sturcture from ground up:<br />
 <img src="misc/617_code.png" width="550"><br />
 <br />
 Next Steps:<br />
