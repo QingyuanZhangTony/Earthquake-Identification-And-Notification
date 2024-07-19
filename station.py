@@ -1,41 +1,64 @@
 import os
-
 import numpy as np
-import requests
+from obspy import UTCDateTime, read, Stream
 from obspy.clients.fdsn import Client
-from obspy.core import UTCDateTime
-from obspy import read, Stream
 from obspy.clients.fdsn.header import FDSNNoDataException
-from obspy.signal.trigger import classic_sta_lta, trigger_onset
-import pandas as pd
-from Other.utils import *
-from earthquake import Earthquake
-import seisbench.models as sbm
 
-from obspy import read
-
-
+from stream import StreamData
+import os
+import numpy as np
+from obspy import Stream, read
+from obspy.clients.fdsn import Client
+import time
 class Station:
-    def __init__(self, network, code, url, report_date):
+    def __init__(self, network, code, url, report_date=None,latitude=None, longitude=None,):
         self.network = network
         self.code = code
         self.url = url
-        self.report_date = UTCDateTime(report_date)
+        self.report_date = UTCDateTime(report_date) if report_date else UTCDateTime()
 
-        self.latitude = None
-        self.longitude = None
+        self.latitude = latitude
+        self.longitude = longitude
+        self.station_folder = None
         self.date_folder = None
         self.report_folder = None
+        self.monitoring_folder = None
 
-        self.original_stream = None
-        self.processed_stream = None
-        self.annotated_stream = None
-        self.picked_signals = None
+        self.stream = StreamData(self)
 
-        # self.instrument_response = None
-
-        self.generate_path(report_date)
+        self.generate_path(self.report_date)
         self.fetch_coordinates()
+
+    def __str__(self):
+        return (f"Station {self.network}.{self.code} at {self.url}\n"
+                f"Location: {self.latitude}, {self.longitude}\n"
+                f"Report Date: {self.report_date.strftime('%Y-%m-%d')}\n"
+                f"Data Folder: {self.date_folder}\n"
+                f"Report Folder: {self.report_folder}\n")
+
+    def fetch_coordinates(self):
+        retry_count = 1  # Set the number of retries
+        while retry_count >= 0:
+            try:
+                client = Client(self.url)
+                endtime = UTCDateTime()
+                inventory = client.get_stations(network=self.network, station=self.code, endtime=endtime,
+                                                level='station')
+                self.latitude = inventory[0][0].latitude
+                self.longitude = inventory[0][0].longitude
+                print("Coordinates fetched successfully.")
+                break  # Break the loop if success
+            except Exception as e:
+                if '502' in str(e):
+                    print(f"HTTP 502 error encountered: Retrying after 15 seconds...")
+                    time.sleep(15)  # Wait for 15 seconds before retrying
+                    retry_count -= 1  # Decrement the retry counter
+                else:
+                    print(f"Error fetching station coordinates: {e}")
+                    break  # Exit loop if the error is not related to HTTP 502
+
+        if retry_count < 0:
+            print("Failed to fetch coordinates after retrying. Error: HTTP 502 Bad Gateway")
 
     def generate_path(self, date):
         if isinstance(date, UTCDateTime):
@@ -47,14 +70,18 @@ class Station:
 
         # Construct the directory paths
         base_dir = os.getcwd()
-        self.date_folder = os.path.join(base_dir, "data", f"{self.network}.{self.code}", date_str)
+        self.station_folder = os.path.join(base_dir, "data", f"{self.network}.{self.code}")
+        self.date_folder = os.path.join(self.station_folder, date_str)
         self.report_folder = os.path.join(self.date_folder, "report")
+        # self.monitoring_folder = os.path.join(self.date_folder, "monitoring")
 
         # Ensure the directories exist
+        os.makedirs(self.station_folder, exist_ok=True)
         os.makedirs(self.date_folder, exist_ok=True)
         os.makedirs(self.report_folder, exist_ok=True)
+        #os.makedirs(self.monitoring_folder, exist_ok=True)
 
-    def download_stream_data(self, overwrite=True):
+    def download_day_stream(self, overwrite=True):
         channel = "*Z*"
         location = "*"
         date_str = self.report_date.strftime("%Y-%m-%d")
@@ -64,116 +91,54 @@ class Station:
         filename = f"{date_str}_{nslc}.mseed"
         filepath = os.path.join(path, filename)
 
+        # 初始化返回状态
+        status = None
+        message = ""
+
         if os.path.isfile(filepath) and not overwrite:
-            print(f"Data for {date_str} already exists.")
-            self.original_stream = read(filepath)  # Read and set the stream object
-            return filepath
+            self.stream.original_stream = read(filepath)  # Read and set the stream object
+            status = "exists"
+            message = f"Data for {date_str} already exists."
+        else:
+            client = Client(self.url)
+            start_time = self.report_date - 300
+            end_time = self.report_date + 86700
+            duration = int((end_time - start_time) / 3)
+            full_stream = Stream()
+            download_successful = True
 
-        client = Client(self.url)
-        start_time = self.report_date - 3600
-        end_time = self.report_date + 90000
-        duration = int((end_time - start_time) / 3)
-        full_stream = Stream()
+            for i in range(3):
+                part_start = start_time + i * duration
+                part_end = part_start + duration if i < 2 else end_time
+                try:
+                    partial_st = client.get_waveforms(self.network, self.code, location, channel, part_start, part_end,
+                                                      attach_response=True)
+                    partial_st.merge(method=0)  # Ensure no overlapping data, handle merging logic based on your data
+                    for tr in partial_st:
+                        if isinstance(tr.data, np.ma.masked_array):
+                            tr.data = tr.data.filled(
+                                fill_value=0)  # Fill masked values before adding to the full stream
+                    full_stream += partial_st
+                    # message += f"Part {i + 1} downloaded for {date_str}.\n"
+                    print(f"Part {i + 1} downloaded for {date_str}.\n")
+                except Exception as e:
+                    message += f"Failed to download part {i + 1} of the data: {e}\n"
+                    download_successful = False
+                    break
 
-        for i in range(3):
-            part_start = start_time + i * duration
-            part_end = part_start + duration if i < 2 else end_time
-            try:
-                partial_st = client.get_waveforms(self.network, self.code, location, channel, part_start, part_end,
-                                                  attach_response=True)
-                partial_st.merge()
-                for tr in partial_st:
+            if download_successful and full_stream.count() > 0:
+                full_stream.merge(method=0)  # Final merge before writing
+                # Convert any remaining masked arrays if they exist
+                for tr in full_stream:
                     if isinstance(tr.data, np.ma.masked_array):
                         tr.data = tr.data.filled(fill_value=0)
-                full_stream += partial_st
-                print(f"Part {i + 1} downloaded for {date_str}.")
-            except Exception as e:
-                print(f"Failed to download part {i + 1} of the data: {e}")
-                return None
+                os.makedirs(path, exist_ok=True)
+                full_stream.write(filepath)
+                self.stream.original_stream = full_stream
+                status = "success"
+            else:
+                status = "error"
+                if full_stream.count() == 0:
+                    message += f"No data available for {date_str}."
 
-        full_stream.merge()
-        os.makedirs(path, exist_ok=True)
-        full_stream.write(filepath)
-        print(f"Data for {date_str} successfully downloaded and combined.")
-        self.original_stream = full_stream  # Set the stream object
-        return filepath
-
-    def predict_and_annotate(self):
-        # Get pretrained model for phase picking
-        model = sbm.EQTransformer.from_pretrained("original")
-
-        # Enable GPU processing if available
-        if torch.cuda.is_available():
-            torch.backends.cudnn.enabled = False
-            model.cuda()
-            print("CUDA available. Phase-picking using GPU")
-        else:
-            print("CUDA not available. Phase-picking using CPU")
-
-        # Perform classification to extract picks
-        outputs = model.classify(self.processed_stream)
-        predictions = []
-
-        for pick in outputs.picks:
-            pick_dict = pick.__dict__
-            pick_data = {
-                "peak_time": pick_dict["peak_time"],
-                "peak_confidence": pick_dict["peak_value"],
-                "phase": pick_dict["phase"]
-            }
-            predictions.append(pick_data)
-
-        # Perform annotation to visualize the picks within the stream
-        self.annotated_stream = model.annotate(self.processed_stream)
-
-        # Adjust channel names in the annotated stream to include the original channel plus the model suffix
-        for tr in self.annotated_stream:
-            parts = tr.stats.channel.split('_')
-            if len(parts) > 1:
-                tr.stats.channel = '_' + '_'.join(parts[1:])  # Join parts starting from the first underscore
-
-        self.picked_signals = predictions
-
-    def filter_confidence(self, p_threshold, s_threshold):
-        # Filter detections based on threshold conditions
-        self.picked_signals = [
-            detection for detection in self.picked_signals
-            if (detection['phase'] == "P" and detection['peak_confidence'] >= p_threshold) or
-               (detection['phase'] == "S" and detection['peak_confidence'] >= s_threshold)
-        ]
-
-    def download_response_file(self):
-        url = f"{self.url}/fdsnws/station/1/query?level=response&network={self.network}&station={self.code}"
-        path = os.path.join(os.getcwd(), "data", f"{self.network}.{self.code}")
-        filepath = os.path.join(path, f"{self.network}_{self.code}_response.xml")
-
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            with open(filepath, 'wb') as file:
-                file.write(response.content)
-            print(f"Response file saved as: {filepath}")
-            return filepath
-        except requests.HTTPError as http_err:
-            print(f"HTTP error occurred: {http_err}")
-            return None
-        except Exception as err:
-            print(f"An error occurred: {err}")
-            return None
-
-    def fetch_coordinates(self):
-        try:
-            client = Client(self.url)
-            endtime = UTCDateTime()
-            inventory = client.get_stations(network=self.network, station=self.code, endtime=endtime, level='station')
-            self.latitude = inventory[0][0].latitude
-            self.longitude = inventory[0][0].longitude
-        except Exception as e:
-            print(f"Error fetching station coordinates: {e}")
-
-    def __str__(self):
-        return (f"Station {self.network}.{self.code} at {self.url}\n"
-                f"Location: {self.latitude}, {self.longitude}\n"
-                f"Report Date: {self.report_date.strftime('%Y-%m-%d')}\n"
-                f"Data Folder: {self.date_folder}\n"
-                f"Report Folder: {self.report_folder}\n")
+        return {"status": status, "message": message.strip(), "filepath": filepath if status != "error" else None}

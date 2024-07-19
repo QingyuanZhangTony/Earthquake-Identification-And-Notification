@@ -1,0 +1,47 @@
+# Station
+network: 'AM'
+station_code: 'R50D6'
+data_provider_url: 'https://data.raspberryshake.org'
+report_date: '2024-04-23'
+overwrite: true
+
+# Catalog
+catalog_providers:
+  - IRIS
+  - USGS
+  - EMSC
+  - GFZ
+  - BGS
+  - CENC
+radmin: 0.0
+radmax: 90.0
+minmag: 0.0
+maxmag: 10.0
+
+# Stream Processing
+detrend_demean: true
+detrend_linear: true
+remove_outliers: true
+apply_bandpass: true
+taper: true
+denoise: true
+save_processed: true
+
+# Phase Detection
+p_threshold: 0.0
+s_threshold: 1.0
+p_only: true
+save_annotated: true
+
+# Event Matching
+tolerance_p: 30.0
+tolerance_s: 0.0
+save_results: true
+
+# Report
+create_gif: true
+fill_map: true
+simplified: false
+
+# Email
+email_recipient: '891578348@qq.com'
